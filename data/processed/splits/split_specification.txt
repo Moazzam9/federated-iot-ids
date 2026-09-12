@@ -1,0 +1,57 @@
+N-BaIoT DATASET SPLIT SPECIFICATION
+==================================
+
+Dataset: N-BaIoT
+Task: Binary intrusion detection
+Clients: 9 logical clients, one per IoT device
+Label 0: Benign
+Label 1: Attack (Gafgyt + Mirai)
+
+Primary split:
+  Training:   70%
+  Validation: 15%
+  Test:       15%
+
+Random seed: 42
+
+Assignment unit:
+  (device, feature_hash)
+
+Partitioning procedure:
+1. Split within each IoT device.
+2. Split benign and attack observations separately within each device.
+3. Preserve benign/attack proportions as closely as possible.
+4. Identical feature-vector groups within a device are treated as indivisible groups.
+5. Duplicate groups cannot cross train/validation/test boundaries within the same device.
+6. The same feature vector occurring on different devices may have different partition assignments.
+7. No global deduplication is performed.
+8. All original observations are retained.
+9. Validation and test remain fixed across training paradigms.
+
+Original labels:
+  benign -> binary 0
+  gafgyt -> binary 1
+  mirai  -> binary 1
+
+Training paradigms:
+  Centralized: all device training data pooled.
+  Local-only: each device trains independently.
+  Natural FL: each device is a logical FL client.
+  Controlled IID-like FL: training data may be redistributed while validation/test remain fixed.
+
+Preprocessing:
+  StandardScaler is fitted using training data only.
+  Validation/test use training-fitted parameters.
+
+Privacy statement:
+  Federated learning avoids centralizing raw client training observations during model training. This design does not provide a formal differential privacy or secure-aggregation guarantee.
+
+Dataset-wide duplicate audit findings:
+  Total observations: 7,062,606
+  Unique feature vectors: 2,482,676
+  Duplicate rows: 4,579,930
+  Duplicate groups: 1,891,636
+  Cross-label feature-vector conflicts: 0
+  Cross-device feature-vector groups: 1,871,053
+  Cross-device + cross-label conflicts: 0
+  Maximum feature-vector multiplicity: 36

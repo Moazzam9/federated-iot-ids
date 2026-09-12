@@ -1,0 +1,64 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.class
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDEs/editors
+.vscode/
+.idea/
+
+# Operating system
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+
+# Test/coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# Local experiment artifacts
+*.tmp
+*.temp
+
+# Dataset files
+data/raw/*
+data/processed/*
+
+# Local result artifacts
+results/raw/*
+results/processed/*
+
+# Keep directory structure
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!results/raw/.gitkeep
+!results/processed/.gitkeep
+
+# Reproducibility metadata for the frozen N-BaIoT split
+!data/processed/splits/
+data/processed/splits/*
+!data/processed/splits/split_specification.txt
+!data/processed/splits/source_index_summary.csv
+!data/processed/splits/nbaiot_split_group_summary.csv

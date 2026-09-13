@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import csv
 import hashlib
 import sqlite3
@@ -66,6 +64,46 @@ def log(message: str = "") -> None:
 def ensure_directories() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+
+
+def build_source_file_path(
+    csv_path: Path,
+    device: str,
+) -> str:
+    """
+    Return a stable dataset-relative source path.
+
+    The temporary extraction directory is intentionally excluded
+    so that audit metadata remains valid after the temporary
+    directory is deleted.
+
+    Example:
+
+        Temporary path:
+        D:\\federated-iot-temp\\...\\zip_extract\\
+        Danmini_Doorbell\\benign_traffic.csv
+
+        Stored source_file:
+        Danmini_Doorbell\\benign_traffic.csv
+    """
+
+    device_index = None
+
+    for index, part in enumerate(csv_path.parts):
+        if part == device:
+            device_index = index
+            break
+
+    if device_index is None:
+        raise ValueError(
+            f"Device directory not found in CSV path:\n"
+            f"{csv_path}\n"
+            f"Device: {device}"
+        )
+
+    relative_parts = csv_path.parts[device_index:]
+
+    return str(Path(*relative_parts))
 
 
 def verify_requirements() -> None:
@@ -432,6 +470,11 @@ def process_csv(
         f"{device} | {label} | {csv_path.name}"
     )
 
+    source_file = build_source_file_path(
+        csv_path=csv_path,
+        device=device,
+    )
+
     with csv_path.open(
         "r",
         encoding="utf-8",
@@ -504,7 +547,7 @@ def process_csv(
                     feature_hash,
                     device,
                     label,
-                    str(csv_path),
+                    source_file,
                     row_number,
                 )
             )
@@ -979,75 +1022,51 @@ def main() -> None:
     )
 
     log(
-        f"Benign rows:                  "
-        f"{stats['benign_rows']:,}"
-    )
-
-    log(
-        f"Attack rows:                  "
-        f"{stats['attack_rows']:,}"
-    )
-
-    log(
-        f"Mirai rows:                   "
-        f"{stats['mirai_rows']:,}"
-    )
-
-    log(
-        f"Gafgyt rows:                  "
-        f"{stats['gafgyt_rows']:,}"
-    )
-
-    log(
-        f"Malformed rows:               "
-        f"{stats['malformed_rows']:,}"
-    )
-
-    log("")
-    log(
-        f"Unique feature vectors:      "
+        f"Unique feature vectors:       "
         f"{stats['unique_feature_vectors']:,}"
     )
 
     log(
-        f"Duplicate rows:              "
+        f"Duplicate rows:               "
         f"{stats['duplicate_rows']:,}"
     )
 
     log(
-        f"Duplicate groups:            "
+        f"Duplicate groups:             "
         f"{stats['duplicate_groups']:,}"
     )
 
     log(
-        f"Cross-label vectors:         "
+        f"Cross-label vectors:          "
         f"{stats['cross_label_feature_vectors']:,}"
     )
 
     log(
-        f"Cross-device vectors:        "
+        f"Cross-device vectors:         "
         f"{stats['cross_device_feature_vectors']:,}"
     )
 
     log(
-        f"Cross-device + cross-label:  "
+        f"Cross-device + cross-label:   "
         f"{stats['cross_device_cross_label_vectors']:,}"
     )
 
     log(
-        f"Maximum multiplicity:        "
-        f"{stats['maximum_duplicate_multiplicity']:,}"
+        f"Maximum duplicate multiplicity:"
+        f" {stats['maximum_duplicate_multiplicity']:,}"
     )
 
     log("")
-    log("Output files:")
-    log(f"  {SUMMARY_PATH}")
-    log(f"  {DEVICE_SUMMARY_PATH}")
-    log(f"  {DB_PATH}")
-
-    log("")
     log(
-        "Temporary extraction directory was removed."
+        f"Audit database: {DB_PATH}"
+    )
+
+    log(
+        f"Summary report: {SUMMARY_PATH}"
+    )
+
+    log(
+        f"Device report:  {DEVICE_SUMMARY_PATH}"
     )
 
 

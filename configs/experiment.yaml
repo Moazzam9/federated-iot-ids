@@ -1,0 +1,116 @@
+project:
+  name: "federated-iot-ids"
+  title: "Federated Learning for Privacy-Preserving and Resource-Efficient Intrusion Detection in IoT Networks"
+  random_seed: 42
+
+dataset:
+  name: "N-BaIoT"
+  expected_source_files: 89
+  expected_total_rows: 7062606
+  expected_features: 115
+  expected_devices: 9
+
+  splits:
+    train: 0
+    validation: 1
+    test: 2
+
+  labels:
+    benign: 0
+    attack: 1
+
+  attack_families:
+    - benign
+    - gafgyt
+    - mirai
+
+  client_definition:
+    type: "device"
+    description: "Each N-BaIoT device is treated as one simulated logical IoT client."
+
+preprocessing:
+  method: "standard_scaler"
+  scaler_fit_split: "train_only"
+  scaler_scope: "global_training_data"
+  missing_value_policy: "fail"
+  feature_count: 115
+
+model:
+  name: "small_mlp"
+  framework: "pytorch"
+
+  architecture:
+    input_dim: 115
+    hidden_layers:
+      - 64
+      - 32
+    output_dim: 1
+    activation: "relu"
+    output_activation: "sigmoid"
+
+  loss: "binary_cross_entropy"
+  optimizer: "adam"
+  learning_rate: 0.001
+
+training:
+  batch_size: 256
+  local_epochs: 1
+  max_centralized_epochs: 10
+  max_local_only_epochs: 10
+  max_federated_rounds: 10
+
+federated:
+  algorithm: "fedavg"
+  client_count: 9
+  clients_per_round: 9
+
+  settings:
+    - "iid"
+    - "device_non_iid"
+
+  aggregation:
+    weighting: "number_of_training_samples"
+
+baselines:
+  - "centralized"
+  - "local_only"
+  - "federated"
+
+evaluation:
+  primary_metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - roc_auc
+
+  additional_metrics:
+    - confusion_matrix
+
+  validation_usage:
+    purpose: "model_selection_and_configuration"
+    test_usage: "final_evaluation_only"
+
+communication:
+  measure:
+    - model_parameter_count
+    - upload_bytes
+    - download_bytes
+    - total_bytes
+
+privacy:
+  differential_privacy: false
+  secure_aggregation: false
+  privacy_claim: "Federated learning alone does not guarantee privacy."
+
+resource_measurement:
+  measure:
+    - training_time_seconds
+    - peak_memory_mb
+    - model_parameter_count
+
+reproducibility:
+  seed: 42
+  deterministic: true
+  save_config: true
+  save_metrics: true

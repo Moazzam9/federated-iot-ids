@@ -228,3 +228,27 @@ def test_evaluation_rejects_empty_batches() -> None:
         raise AssertionError(
             "Expected evaluate_batches() to reject empty batches."
         )
+
+def test_evaluation_roc_auc_handles_tied_probabilities():
+    model = nn.Sequential(
+        nn.Identity()
+    )
+
+    criterion = nn.BCELoss()
+
+    batches = iter(
+        [
+            (
+                torch.tensor([[0.5], [0.5], [0.2], [0.2]], dtype=torch.float32),
+                torch.tensor([[1.0], [0.0], [1.0], [0.0]], dtype=torch.float32),
+            )
+        ]
+    )
+
+    metrics = evaluate_batches(
+        model=model,
+        batches=batches,
+        criterion=criterion,
+    )
+
+    assert metrics.roc_auc == 0.5

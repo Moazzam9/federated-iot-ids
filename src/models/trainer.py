@@ -2,13 +2,18 @@
 
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Iterator, Optional
+from typing import Iterator
 
 import numpy as np
 import torch
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from torch import nn
-
-from src.models.mlp import SmallMLP
 
 
 @dataclass(frozen=True)
@@ -34,23 +39,19 @@ class EvaluationMetrics:
 
 
 def set_random_seed(seed: int) -> None:
-    """
-    Set random seeds for reproducible CPU-based experiments.
-    """
+    """Set random seeds for reproducible CPU-based experiments."""
     np.random.seed(seed)
     torch.manual_seed(seed)
 
 
 def train_one_epoch(
-    model: SmallMLP,
+    model: nn.Module,
     batches: Iterator[tuple[torch.Tensor, torch.Tensor]],
     optimizer: torch.optim.Optimizer,
     criterion: nn.Module,
     device: str = "cpu",
 ) -> TrainingMetrics:
-    """
-    Train a model for one epoch over a streamed sequence of batches.
-    """
+    """Train a model for one epoch over streamed batches."""
     if device != "cpu":
         raise ValueError(
             "Only CPU execution is currently supported."
@@ -95,7 +96,7 @@ def train_one_epoch(
 
 
 def evaluate_batches(
-    model: SmallMLP,
+    model: nn.Module,
     batches: Iterator[tuple[torch.Tensor, torch.Tensor]],
     criterion: nn.Module,
     device: str = "cpu",
@@ -103,9 +104,8 @@ def evaluate_batches(
     """
     Evaluate a binary classifier over streamed batches.
 
-    Predictions are accumulated as CPU NumPy arrays so that the
-    complete validation/test feature matrix does not need to remain
-    in memory.
+    Labels and predicted probabilities are accumulated on the CPU
+    so the complete feature matrix does not need to remain in memory.
     """
     if device != "cpu":
         raise ValueError(
@@ -152,72 +152,43 @@ def evaluate_batches(
             "No samples were provided to evaluate_batches()."
         )
 
-    labels_array = np.concatenate(all_labels)
+    labels_array = np.concatenate(all_labels).astype(np.int64)
     probabilities_array = np.concatenate(all_probabilities)
 
     predictions_array = (
         probabilities_array >= 0.5
     ).astype(np.int64)
 
-    labels_int = labels_array.astype(np.int64)
-
-    true_positive = np.sum(
-        (predictions_array == 1)
-        & (labels_int == 1)
+    accuracy = accuracy_score(
+        labels_array,
+        predictions_array,
     )
 
-    true_negative = np.sum(
-        (predictions_array == 0)
-        & (labels_int == 0)
+    precision = precision_score(
+        labels_array,
+        predictions_array,
+        zero_division=0,
     )
 
-    false_positive = np.sum(
-        (predictions_array == 1)
-        & (labels_int == 0)
+    recall = recall_score(
+        labels_array,
+        predictions_array,
+        zero_division=0,
     )
 
-    false_negative = np.sum(
-        (predictions_array == 0)
-        & (labels_int == 1)
+    f1 = f1_score(
+        labels_array,
+        predictions_array,
+        zero_division=0,
     )
 
-    accuracy = (
-        (true_positive + true_negative)
-        / total_samples
-    )
-
-    precision_denominator = (
-        true_positive + false_positive
-    )
-
-    recall_denominator = (
-        true_positive + false_negative
-    )
-
-    precision = (
-        true_positive / precision_denominator
-        if precision_denominator > 0
-        else 0.0
-    )
-
-    recall = (
-        true_positive / recall_denominator
-        if recall_denominator > 0
-        else 0.0
-    )
-
-    f1_denominator = precision + recall
-
-    f1 = (
-        2.0 * precision * recall / f1_denominator
-        if f1_denominator > 0
-        else 0.0
-    )
-
-    roc_auc = _binary_roc_auc(
-        labels_int,
-        probabilities_array,
-    )
+    if np.unique(labels_array).size < 2:
+        roc_auc = 0.5
+    else:
+        roc_auc = roc_auc_score(
+            labels_array,
+            probabilities_array,
+        )
 
     return EvaluationMetrics(
         loss=total_loss / total_samples,
@@ -228,41 +199,3 @@ def evaluate_batches(
         f1=float(f1),
         roc_auc=float(roc_auc),
     )
-
-
-def _binary_roc_auc(
-    labels: np.ndarray,
-    probabilities: np.ndarray,
-) -> float:
-    """
-    Calculate binary ROC-AUC without requiring the full sklearn
-    metric stack inside the training loop.
-
-    Returns 0.5 when only one class is present because ROC-AUC
-    is undefined in that situation.
-    """
-    positive_count = np.sum(labels == 1)
-    negative_count = np.sum(labels == 0)
-
-    if positive_count == 0 or negative_count == 0:
-        return 0.5
-
-    order = np.argsort(
-        probabilities,
-        kind="mergesort",
-    )
-
-    sorted_labels = labels[order]
-
-    positive_ranks = (
-        np.flatnonzero(sorted_labels == 1) + 1
-    )
-
-    rank_sum = positive_ranks.sum()
-
-    auc = (
-        rank_sum
-        - positive_count * (positive_count + 1) / 2
-    ) / (positive_count * negative_count)
-
-    return float(auc)

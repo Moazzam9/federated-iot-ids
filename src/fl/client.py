@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -49,6 +49,39 @@ def _clone_state_dict_to_cpu(
     )
 
 
+def _count_client_training_samples(
+    loader: NBaIoTSplitLoader,
+    client_id: str,
+) -> int:
+    """
+    Return the number of training examples assigned to one client.
+
+    For device-based N-BaIoT clients, the validated source-index
+    metadata already contains the frozen training-row count for
+    every source file. Therefore, this function uses metadata
+    instead of rereading the raw CSV files.
+
+    This count represents the client's dataset size and is used
+    for FedAvg weighting. It is independent of the number of
+    local epochs.
+    """
+    if not client_id:
+        raise ValueError("client_id must not be empty.")
+
+    total_samples = sum(
+        record.train_count
+        for record in loader.source_records
+        if record.device == client_id
+    )
+
+    if total_samples <= 0:
+        raise ValueError(
+            f"Client {client_id!r} has no training samples."
+        )
+
+    return total_samples
+
+
 def train_client(
     model: nn.Module,
     loader: NBaIoTSplitLoader,
@@ -66,8 +99,14 @@ def train_client(
     A new optimizer is created for this local training round.
 
     For device-based clients, `client_id` must be a valid N-BaIoT
-    device name. The loader's devices=[client_id] filter ensures that
-    only that device's rows are used.
+    device name. The loader's devices=[client_id] filter ensures
+    that only that device's rows are used.
+
+    `samples` represents the number of unique training examples
+    available to the client. It does NOT multiply by the number
+    of local epochs, because FedAvg weighting depends on client
+    dataset size rather than the number of times that dataset was
+    traversed.
     """
     if not client_id:
         raise ValueError("client_id must not be empty.")
@@ -85,6 +124,11 @@ def train_client(
         raise ValueError(
             "Only CPU execution is currently supported."
         )
+
+    client_samples = _count_client_training_samples(
+        loader=loader,
+        client_id=client_id,
+    )
 
     criterion = nn.BCELoss()
 
@@ -115,25 +159,30 @@ def train_client(
 
         epoch_metrics.append(metrics)
 
-    total_samples = sum(
-        metrics.samples
-        for metrics in epoch_metrics
-    )
-
     total_elapsed = sum(
         metrics.elapsed_seconds
         for metrics in epoch_metrics
     )
 
+    total_epoch_samples = sum(
+        metrics.samples
+        for metrics in epoch_metrics
+    )
+
+    if total_epoch_samples <= 0:
+        raise ValueError(
+            f"Client {client_id!r} produced no training samples."
+        )
+
     weighted_loss = sum(
         metrics.loss * metrics.samples
         for metrics in epoch_metrics
-    ) / total_samples
+    ) / total_epoch_samples
 
     return ClientTrainingResult(
         client_id=client_id,
         state_dict=_clone_state_dict_to_cpu(model),
-        samples=total_samples,
+        samples=client_samples,
         epochs=epochs,
         loss=float(weighted_loss),
         elapsed_seconds=float(total_elapsed),

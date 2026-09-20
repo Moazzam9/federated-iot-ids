@@ -691,6 +691,13 @@ class NBaIoTSplitLoader:
     ) -> Path:
         """
         Return the physical .npy split-index path.
+
+        The loader may receive either:
+        1. the dedicated ``source_indexes`` directory, or
+        2. the parent ``splits`` directory.
+
+        Resolve both layouts so callers do not need to know the
+        physical storage detail.
         """
 
         index_path = (
@@ -698,14 +705,34 @@ class NBaIoTSplitLoader:
             / record.index_file
         )
 
-        if not index_path.is_file():
-            raise FileNotFoundError(
-                "Split index does not exist:\n"
-                f"{index_path}\n\n"
-                f"Source CSV: {record.source_file}"
-            )
+        if index_path.is_file():
+            return index_path
 
-        return index_path
+        fallback_path = (
+            self.split_root
+            / "source_indexes"
+            / record.index_file.name
+        )
+
+        if fallback_path.is_file():
+            return fallback_path
+
+        parent_fallback_path = (
+            self.split_root.parent
+            / "source_indexes"
+            / record.index_file.name
+        )
+
+        if parent_fallback_path.is_file():
+            return parent_fallback_path
+
+        raise FileNotFoundError(
+            "Split index does not exist. Checked:\n"
+            f"{index_path}\n"
+            f"{fallback_path}\n"
+            f"{parent_fallback_path}\n\n"
+            f"Source CSV: {record.source_file}"
+        )
 
     # ------------------------------------------------------------------
     # Split index loading

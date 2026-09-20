@@ -2,15 +2,19 @@
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Iterator, Optional
 
 import torch
 from torch import nn
 
 from src.data.nbaiot_loader import NBaIoTSplitLoader
 from src.data.preprocessing import FittedStandardScaler
-from src.data.torch_data import iter_torch_batches
+from src.data.torch_data import BatchData, iter_torch_batches
 from src.models.trainer import TrainingMetrics, train_one_epoch
+from src.fl.client_data import (
+    ClientDataSource,
+    DeviceClientDataSource,
+)
 
 
 @dataclass(frozen=True)
@@ -26,9 +30,10 @@ class ClientTrainingResult:
 
 
 def _batch_iterator(
-    batches,
+    batches: Iterator[BatchData],
 ) -> Iterator[tuple[torch.Tensor, torch.Tensor]]:
     """Convert BatchData objects into trainer-compatible tuples."""
+
     for batch in batches:
         yield batch.features, batch.labels
 
@@ -40,6 +45,7 @@ def _clone_state_dict_to_cpu(
     Copy model state to CPU so the client result is independent
     of the client's model object.
     """
+
     return OrderedDict(
         (
             name,
@@ -54,32 +60,46 @@ def _count_client_training_samples(
     client_id: str,
 ) -> int:
     """
-    Return the number of training examples assigned to one client.
+    Return the number of training examples assigned to one
+    device-based N-BaIoT client.
 
-    For device-based N-BaIoT clients, the validated source-index
-    metadata already contains the frozen training-row count for
-    every source file. Therefore, this function uses metadata
-    instead of rereading the raw CSV files.
-
-    This count represents the client's dataset size and is used
-    for FedAvg weighting. It is independent of the number of
-    local epochs.
+    This compatibility helper preserves the existing behavior
+    used by the current tests while delegating counting to the
+    device client data source.
     """
-    if not client_id:
-        raise ValueError("client_id must not be empty.")
 
-    total_samples = sum(
-        record.train_count
-        for record in loader.source_records
-        if record.device == client_id
+    data_source = DeviceClientDataSource(loader)
+
+    return data_source.count_training_samples(
+        client_id
     )
 
-    if total_samples <= 0:
-        raise ValueError(
-            f"Client {client_id!r} has no training samples."
-        )
 
-    return total_samples
+def _train_device_client_batches(
+    loader: NBaIoTSplitLoader,
+    scaler: FittedStandardScaler,
+    client_id: str,
+    batch_size: int,
+    device: str,
+) -> Iterator[BatchData]:
+    """
+    Yield batches for a device client.
+
+    This function deliberately uses the module-level
+    `iter_torch_batches` symbol so the existing real-data smoke
+    tests can continue to monkeypatch it.
+
+    IID clients use their own data-source implementation.
+    """
+
+    yield from iter_torch_batches(
+        loader=loader,
+        scaler=scaler,
+        split="train",
+        devices=[client_id],
+        batch_size=batch_size,
+        device=device,
+    )
 
 
 def train_client(
@@ -91,44 +111,82 @@ def train_client(
     batch_size: int = 256,
     learning_rate: float = 0.001,
     device: str = "cpu",
+    client_data_source: Optional[ClientDataSource] = None,
 ) -> ClientTrainingResult:
     """
-    Train one federated client on only its assigned N-BaIoT data.
+    Train one federated client using the supplied client data source.
 
-    The client receives the current global model through `model`.
-    A new optimizer is created for this local training round.
+    If no data source is supplied, the original device-based
+    N-BaIoT client definition is used.
 
-    For device-based clients, `client_id` must be a valid N-BaIoT
-    device name. The loader's devices=[client_id] filter ensures
-    that only that device's rows are used.
+    IID experiments can supply an IIDClientDataSource.
 
-    `samples` represents the number of unique training examples
-    available to the client. It does NOT multiply by the number
-    of local epochs, because FedAvg weighting depends on client
-    dataset size rather than the number of times that dataset was
-    traversed.
+    `samples` represents the number of training examples available
+    to the client. It is not multiplied by the number of local
+    epochs because FedAvg weighting is based on client dataset size.
     """
+
     if not client_id:
-        raise ValueError("client_id must not be empty.")
+        raise ValueError(
+            "client_id must not be empty."
+        )
 
     if epochs <= 0:
-        raise ValueError("epochs must be greater than zero.")
+        raise ValueError(
+            "epochs must be greater than zero."
+        )
 
     if batch_size <= 0:
-        raise ValueError("batch_size must be greater than zero.")
+        raise ValueError(
+            "batch_size must be greater than zero."
+        )
 
     if learning_rate <= 0:
-        raise ValueError("learning_rate must be greater than zero.")
+        raise ValueError(
+            "learning_rate must be greater than zero."
+        )
 
     if device != "cpu":
         raise ValueError(
             "Only CPU execution is currently supported."
         )
 
-    client_samples = _count_client_training_samples(
-        loader=loader,
-        client_id=client_id,
-    )
+    if client_data_source is None:
+        client_data_source = DeviceClientDataSource(
+            loader
+        )
+
+        client_samples = (
+            client_data_source.count_training_samples(
+                client_id
+            )
+        )
+
+        def batch_source() -> Iterator[BatchData]:
+            yield from _train_device_client_batches(
+                loader=loader,
+                scaler=scaler,
+                client_id=client_id,
+                batch_size=batch_size,
+                device=device,
+            )
+
+    else:
+        client_samples = (
+            client_data_source.count_training_samples(
+                client_id
+            )
+        )
+
+        def batch_source() -> Iterator[BatchData]:
+            yield from (
+                client_data_source.iter_torch_batches(
+                    client_id=client_id,
+                    scaler=scaler,
+                    batch_size=batch_size,
+                    device=device,
+                )
+            )
 
     criterion = nn.BCELoss()
 
@@ -140,18 +198,11 @@ def train_client(
     epoch_metrics: list[TrainingMetrics] = []
 
     for _ in range(epochs):
-        batches = iter_torch_batches(
-            loader=loader,
-            scaler=scaler,
-            split="train",
-            devices=[client_id],
-            batch_size=batch_size,
-            device=device,
-        )
-
         metrics = train_one_epoch(
             model=model,
-            batches=_batch_iterator(batches),
+            batches=_batch_iterator(
+                batch_source()
+            ),
             optimizer=optimizer,
             criterion=criterion,
             device=device,

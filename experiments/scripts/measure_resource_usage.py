@@ -40,7 +40,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "command",
         nargs=argparse.REMAINDER,
-        help="Command to execute after --. Example: -- python -m experiments.scripts.run_centralized --epochs 1",
+        help=(
+            "Command to execute after --. Example: "
+            "-- python -m experiments.scripts.run_centralized --epochs 1"
+        ),
     )
 
     return parser.parse_args()
@@ -55,13 +58,36 @@ def validate_args(args: argparse.Namespace) -> None:
             "No command supplied. Put the experiment command after --."
         )
 
-    # argparse.REMAINDER may preserve the separator itself depending on how
-    # the command was invoked. Remove it if present.
-    if args.command and args.command[0] == "--":
+    if args.command[0] == "--":
         args.command = args.command[1:]
 
     if not args.command:
         raise ValueError("No command supplied after --.")
+
+
+def normalize_python_command(command: Sequence[str]) -> list[str]:
+    """
+    Replace a generic Python executable name with the exact interpreter
+    running this resource-monitor process.
+    """
+    normalized = list(command)
+
+    if not normalized:
+        return normalized
+
+    executable_name = Path(normalized[0]).name.lower()
+
+    python_names = {
+        "python",
+        "python.exe",
+        "python3",
+        "python3.exe",
+    }
+
+    if executable_name in python_names:
+        normalized[0] = sys.executable
+
+    return normalized
 
 
 def process_rss_bytes(process: psutil.Process) -> int:
@@ -117,10 +143,12 @@ def run_and_measure(
     Peak memory is reported as the maximum sampled RSS of the root process
     plus any child processes.
     """
+    normalized_command = normalize_python_command(command)
+
     start_time = time.perf_counter()
 
     completed_process = subprocess.Popen(
-        list(command),
+        normalized_command,
         cwd=PROJECT_ROOT,
     )
 
@@ -129,7 +157,6 @@ def run_and_measure(
     peak_rss_bytes = 0
     samples = 0
 
-    # Capture memory immediately after process creation.
     current_rss = collect_process_tree_rss_bytes(process)
     peak_rss_bytes = max(peak_rss_bytes, current_rss)
     samples += 1
@@ -141,8 +168,6 @@ def run_and_measure(
 
         time.sleep(interval_seconds)
 
-    # One final sample after the process exits may still capture the last
-    # available process information before Windows releases it.
     current_rss = collect_process_tree_rss_bytes(process)
     peak_rss_bytes = max(peak_rss_bytes, current_rss)
     samples += 1
@@ -151,7 +176,8 @@ def run_and_measure(
 
     return {
         "status": "completed" if completed_process.returncode == 0 else "failed",
-        "command": list(command),
+        "command_requested": list(command),
+        "command_executed": normalized_command,
         "working_directory": str(PROJECT_ROOT),
         "process_id": completed_process.pid,
         "exit_code": completed_process.returncode,
@@ -162,15 +188,17 @@ def run_and_measure(
             "sampling_interval_seconds": interval_seconds,
             "samples_collected": samples,
         },
-        "wall_time_seconds": elapsed_seconds,
         "tool": {
+            "python_executable": sys.executable,
             "python_version": sys.version,
             "psutil_version": psutil.__version__,
         },
+        "wall_time_seconds": elapsed_seconds,
         "notes": [
             "Peak memory is measured as resident set size (RSS).",
             "RSS is sampled periodically and therefore represents the peak observed sample, not an instantaneous hardware-level maximum.",
             "The measurement includes the launched Python process and any child processes that exist during sampling.",
+            "Generic Python executable names are replaced with the exact interpreter running this resource monitor.",
             "This is process memory, not total system RAM usage.",
             "Network traffic, disk cache, and operating-system-wide memory usage are not represented by this metric.",
         ],
@@ -191,9 +219,14 @@ def main() -> int:
 
     print("RESOURCE MEASUREMENT")
     print("=" * 72)
-    print(f"Command:              {' '.join(args.command)}")
+    print(f"Requested command:    {' '.join(args.command)}")
+
+    normalized_command = normalize_python_command(args.command)
+    print(f"Executed command:     {' '.join(normalized_command)}")
+
     print(f"Working directory:    {PROJECT_ROOT}")
     print(f"Sampling interval:    {args.interval:.3f} seconds")
+    print(f"Monitor Python:       {sys.executable}")
     print(f"Output:               {output_path}")
     print()
 

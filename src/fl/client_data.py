@@ -4,27 +4,12 @@ from typing import Iterator, Protocol
 
 from src.data.nbaiot_loader import NBaIoTSplitLoader
 from src.data.preprocessing import FittedStandardScaler
-from src.data.torch_data import BatchData
+from src.data.torch_data import BatchData, iter_torch_batches
 from src.fl.iid_data import IIDClientDataLoader
 
 
 class ClientDataSource(Protocol):
-    """
-    Interface used by federated local training.
-
-    A client data source must provide:
-        1. the number of training samples assigned to a client;
-        2. standardized PyTorch batches for that client.
-
-    This allows the same local-training implementation to support
-    different client-partitioning strategies.
-    """
-
-    def count_training_samples(
-        self,
-        client_id: str,
-    ) -> int:
-        """Return the number of training samples assigned to a client."""
+    def count_training_samples(self, client_id: str) -> int:
         ...
 
     def iter_torch_batches(
@@ -34,34 +19,16 @@ class ClientDataSource(Protocol):
         batch_size: int = 256,
         device: str = "cpu",
     ) -> Iterator[BatchData]:
-        """Yield standardized PyTorch batches for one client."""
         ...
 
 
 class DeviceClientDataSource:
-    """
-    Adapter for the original device-based N-BaIoT client definition.
-
-    Each physical device represented in N-BaIoT is treated as one
-    simulated logical federated client.
-    """
-
-    def __init__(
-        self,
-        loader: NBaIoTSplitLoader,
-    ) -> None:
+    def __init__(self, loader: NBaIoTSplitLoader) -> None:
         self.loader = loader
 
-    def count_training_samples(
-        self,
-        client_id: str,
-    ) -> int:
-        """Return the frozen training-row count for one device client."""
-
+    def count_training_samples(self, client_id: str) -> int:
         if not client_id:
-            raise ValueError(
-                "client_id must not be empty."
-            )
+            raise ValueError("client_id must not be empty.")
 
         total_samples = sum(
             record.train_count
@@ -83,9 +50,11 @@ class DeviceClientDataSource:
         batch_size: int = 256,
         device: str = "cpu",
     ) -> Iterator[BatchData]:
-        """Yield standardized batches for one device client."""
+        if not client_id:
+            raise ValueError("client_id must not be empty.")
 
-        yield from self.loader.iter_torch_batches(
+        yield from iter_torch_batches(
+            loader=self.loader,
             scaler=scaler,
             split="train",
             devices=[client_id],
@@ -95,31 +64,11 @@ class DeviceClientDataSource:
 
 
 class IIDClientDataSource:
-    """
-    Adapter for the deterministic stratified IID client partition.
-
-    Client IDs use:
-        client_1
-        client_2
-        ...
-        client_9
-    """
-
-    def __init__(
-        self,
-        loader: IIDClientDataLoader,
-    ) -> None:
+    def __init__(self, loader: IIDClientDataLoader) -> None:
         self.loader = loader
 
-    def count_training_samples(
-        self,
-        client_id: str,
-    ) -> int:
-        """Return the number of training rows assigned to one IID client."""
-
-        return self.loader.count_client_rows(
-            client_id
-        )
+    def count_training_samples(self, client_id: str) -> int:
+        return self.loader.count_client_rows(client_id)
 
     def iter_torch_batches(
         self,
@@ -128,8 +77,6 @@ class IIDClientDataSource:
         batch_size: int = 256,
         device: str = "cpu",
     ) -> Iterator[BatchData]:
-        """Yield standardized batches for one IID client."""
-
         yield from self.loader.iter_torch_batches(
             client_id=client_id,
             scaler=scaler,

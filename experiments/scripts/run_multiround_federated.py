@@ -426,12 +426,15 @@ def main() -> None:
         f"Seed:               {args.seed}"
     )
 
-    print(
-        "Validation batches: "
-        f"{args.validation_max_batches}"
-        if args.validation_max_batches is not None
-        else "Validation batches: ALL"
-    )
+    if args.validation_max_batches is not None:
+        print(
+            "Validation batches: "
+            f"{args.validation_max_batches}"
+        )
+    else:
+        print(
+            "Validation batches: ALL"
+        )
 
     # --------------------------------------------------------------
     # Loader
@@ -446,14 +449,22 @@ def main() -> None:
 
     print("Source split indexes: PASS")
 
+    training_rows = (
+        loader.total_rows_for_split("train")
+    )
+
+    validation_rows = (
+        loader.total_rows_for_split("validation")
+    )
+
     print(
         f"Training rows:   "
-        f"{loader.training_row_count:,}"
+        f"{training_rows:,}"
     )
 
     print(
         f"Validation rows: "
-        f"{loader.validation_row_count:,}"
+        f"{validation_rows:,}"
     )
 
     # --------------------------------------------------------------
@@ -485,6 +496,8 @@ def main() -> None:
         f"Client count: {len(client_ids)}"
     )
 
+    client_sample_counts: dict[str, int] = {}
+
     for client_id in client_ids:
 
         samples = (
@@ -493,16 +506,17 @@ def main() -> None:
             )
         )
 
+        client_sample_counts[client_id] = int(
+            samples
+        )
+
         print(
             f"{client_id}: "
             f"{samples:,}"
         )
 
     total_client_samples = sum(
-        client_data_source.count_training_samples(
-            client_id
-        )
-        for client_id in client_ids
+        client_sample_counts.values()
     )
 
     print(
@@ -510,10 +524,12 @@ def main() -> None:
         f"{total_client_samples:,}"
     )
 
-    if total_client_samples != loader.training_row_count:
+    if total_client_samples != training_rows:
         raise RuntimeError(
             "Client sample counts do not equal "
-            "the frozen training split."
+            "the frozen training split.\n"
+            f"Client total: {total_client_samples:,}\n"
+            f"Training rows: {training_rows:,}"
         )
 
     print("Client sample counts: PASS")
@@ -768,13 +784,15 @@ def main() -> None:
                 "checkpoint_path": str(
                     checkpoint_path
                 ),
-                "validation": metrics_to_dict(
-                    validation_metrics
-                )
-                | {
-                    "evaluation_time_seconds":
-                        validation_time
-                },
+                "validation": (
+                    metrics_to_dict(
+                        validation_metrics
+                    )
+                    | {
+                        "evaluation_time_seconds":
+                            validation_time
+                    }
+                ),
                 "clients": client_round_results,
             }
         )
@@ -800,6 +818,10 @@ def main() -> None:
             "rounds_requested": args.rounds,
             "rounds_completed":
                 len(round_results),
+            "total_training_rows": training_rows,
+            "total_validation_rows": validation_rows,
+            "client_sample_counts":
+                client_sample_counts,
             "rounds": round_results,
         }
 
@@ -838,6 +860,10 @@ def main() -> None:
         "rounds_completed": len(round_results),
         "total_experiment_wall_time_seconds":
             float(experiment_elapsed),
+        "total_training_rows": training_rows,
+        "total_validation_rows": validation_rows,
+        "client_sample_counts":
+            client_sample_counts,
         "rounds": round_results,
         "notes": [
             (

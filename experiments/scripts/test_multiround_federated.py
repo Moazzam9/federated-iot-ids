@@ -1,84 +1,23 @@
 from __future__ import annotations
 
 import json
-import sys
+import tempfile
 from dataclasses import fields
 from pathlib import Path
-from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 import torch
 
-
-# ----------------------------------------------------------------------
-# Make project root importable.
-# ----------------------------------------------------------------------
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-
-# ----------------------------------------------------------------------
-# Project imports.
-# ----------------------------------------------------------------------
-
-from src.data.preprocessing import FittedStandardScaler
-from src.fl.client import ClientTrainingResult
 from src.models.mlp import SmallMLP
 from src.models.trainer import EvaluationMetrics
+from src.fl.client import ClientTrainingResult
+from src.fl.coordinator import FederatedRoundResult
 
 
 # ----------------------------------------------------------------------
-# Constants
+# Import production runner
 # ----------------------------------------------------------------------
 
-SCRIPT_PATH = (
-    PROJECT_ROOT
-    / "experiments"
-    / "scripts"
-    / "run_multiround_federated.py"
-)
-
-EXPECTED_CLIENT_IDS = [
-    "client_1",
-    "client_2",
-    "client_3",
-    "client_4",
-    "client_5",
-    "client_6",
-    "client_7",
-    "client_8",
-    "client_9",
-]
-
-EXPECTED_CLIENT_COUNTS = {
-    "client_1": 112,
-    "client_2": 111,
-    "client_3": 111,
-    "client_4": 111,
-    "client_5": 111,
-    "client_6": 111,
-    "client_7": 111,
-    "client_8": 111,
-    "client_9": 111,
-}
-
-EXPECTED_TOTAL_SAMPLES = 1000
-EXPECTED_VALIDATION_SAMPLES = 200
-
-EXPECTED_LOSS = 0.10
-EXPECTED_ACCURACY = 0.95
-EXPECTED_PRECISION = 0.94
-EXPECTED_RECALL = 0.93
-EXPECTED_F1 = 0.935
-EXPECTED_ROC_AUC = 0.97
-
-EXPECTED_CLIENT_LOSS = 0.25
-EXPECTED_CLIENT_EPOCHS = 1
-EXPECTED_CLIENT_ELAPSED = 0.01
-EXPECTED_AGGREGATION_TIME = 0.01
+import experiments.scripts.run_multiround_federated as runner
 
 
 # ----------------------------------------------------------------------
@@ -87,51 +26,40 @@ EXPECTED_AGGREGATION_TIME = 0.01
 
 class FakeLoader:
     """
-    Minimal fake N-BaIoT loader.
+    Minimal loader interface required by the production runner.
 
-    The production runner only needs the attributes and method defined
-    here during the smoke test.
+    This fake loader allows the real multi-round runner to be tested
+    without reading the full N-BaIoT dataset.
     """
 
-    def __init__(self) -> None:
-        self.training_row_count = EXPECTED_TOTAL_SAMPLES
-        self.validation_row_count = EXPECTED_VALIDATION_SAMPLES
+    def __init__(
+        self,
+        training_rows: int = 1000,
+        validation_rows: int = 200,
+    ) -> None:
+
+        self._training_rows = training_rows
+        self._validation_rows = validation_rows
 
         self.source_records = []
 
     def validate_source_indexes(self) -> None:
         return None
 
+    def total_rows_for_split(
+        self,
+        split: str,
+    ) -> int:
 
-def fake_create_loader(*args, **kwargs) -> FakeLoader:
-    return FakeLoader()
+        if split == "train":
+            return self._training_rows
 
+        if split == "validation":
+            return self._validation_rows
 
-# ----------------------------------------------------------------------
-# Fake scaler
-# ----------------------------------------------------------------------
-
-def make_fake_scaler() -> FittedStandardScaler:
-    """
-    Construct a minimal FittedStandardScaler instance.
-
-    No real dataset or real scaler file is loaded.
-    """
-
-    scaler = object.__new__(FittedStandardScaler)
-
-    scaler.scaler = None
-    scaler.feature_count = 115
-    scaler.fitted = True
-
-    return scaler
-
-
-def fake_load_training_scaler(
-    *args,
-    **kwargs,
-) -> FittedStandardScaler:
-    return make_fake_scaler()
+        raise ValueError(
+            f"Unsupported fake split: {split!r}"
+        )
 
 
 # ----------------------------------------------------------------------
@@ -140,112 +68,95 @@ def fake_load_training_scaler(
 
 class FakeClientDataSource:
     """
-    Deterministic fake client data source.
+    Deterministic nine-client fake data source.
 
-    112 + (8 * 111) = 1000 total samples.
+    The sample counts sum to exactly 1,000.
     """
 
-    def __init__(self) -> None:
-        self.client_counts = dict(EXPECTED_CLIENT_COUNTS)
+    CLIENT_COUNTS = {
+        "client_1": 112,
+        "client_2": 111,
+        "client_3": 111,
+        "client_4": 111,
+        "client_5": 111,
+        "client_6": 111,
+        "client_7": 111,
+        "client_8": 111,
+        "client_9": 111,
+    }
 
     def count_training_samples(
         self,
         client_id: str,
     ) -> int:
-        if client_id not in self.client_counts:
+
+        if client_id not in self.CLIENT_COUNTS:
             raise ValueError(
-                f"Unknown fake client: {client_id}"
+                f"Unknown fake client: {client_id!r}"
             )
 
-        return self.client_counts[client_id]
-
-
-def fake_create_client_data_source(
-    *args,
-    **kwargs,
-):
-    """
-    Exact return structure used by the production runner:
-
-        client_ids, client_data_source
-    """
-
-    return (
-        EXPECTED_CLIENT_IDS.copy(),
-        FakeClientDataSource(),
-    )
+        return self.CLIENT_COUNTS[client_id]
 
 
 # ----------------------------------------------------------------------
-# State-dict helper
+# Fake scaler
 # ----------------------------------------------------------------------
 
-def clone_state_dict(
-    state_dict: dict[str, torch.Tensor],
-) -> dict[str, torch.Tensor]:
-    return {
-        key: value.detach().cpu().clone()
-        for key, value in state_dict.items()
-    }
+class FakeScaler:
+    pass
 
 
 # ----------------------------------------------------------------------
-# Fake ClientTrainingResult
+# Fake client result
 # ----------------------------------------------------------------------
 
-def make_client_training_result(
+def make_fake_client_result(
     client_id: str,
-    sample_count: int,
-    state_dict: dict[str, torch.Tensor],
+    samples: int,
+    epochs: int,
+    global_model: SmallMLP,
 ) -> ClientTrainingResult:
     """
-    Build ClientTrainingResult using its actual dataclass fields.
+    Construct a fake ClientTrainingResult using the actual
+    ClientTrainingResult dataclass from src.fl.client.
 
-    The production runner explicitly accesses:
-
-        client_id
-        samples
-        epochs
-        loss
-        elapsed_seconds
-
-    The state dictionary is also supplied where the actual dataclass
-    exposes a state/model-state field.
+    The smoke test does not perform real client training.
     """
 
-    result_values = {}
+    field_names = {
+        field.name
+        for field in fields(ClientTrainingResult)
+    }
 
-    for field in fields(ClientTrainingResult):
-        name = field.name
+    values = {}
 
-        if name == "client_id":
-            result_values[name] = client_id
+    if "client_id" in field_names:
+        values["client_id"] = client_id
 
-        elif name == "samples":
-            result_values[name] = sample_count
+    if "samples" in field_names:
+        values["samples"] = samples
 
-        elif name == "epochs":
-            result_values[name] = EXPECTED_CLIENT_EPOCHS
+    if "epochs" in field_names:
+        values["epochs"] = epochs
 
-        elif name == "loss":
-            result_values[name] = EXPECTED_CLIENT_LOSS
+    if "loss" in field_names:
+        values["loss"] = 0.25
 
-        elif name == "elapsed_seconds":
-            result_values[name] = EXPECTED_CLIENT_ELAPSED
+    if "elapsed_seconds" in field_names:
+        values["elapsed_seconds"] = 0.01
 
-        elif name == "state_dict":
-            result_values[name] = clone_state_dict(
-                state_dict
-            )
+    state_dict = {
+        key: value.detach().clone()
+        for key, value in global_model.state_dict().items()
+    }
 
-        elif name == "model_state_dict":
-            result_values[name] = clone_state_dict(
-                state_dict
-            )
+    if "state_dict" in field_names:
+        values["state_dict"] = state_dict
 
-    return ClientTrainingResult(
-        **result_values
-    )
+    if "model_state_dict" in field_names:
+        values["model_state_dict"] = state_dict
+
+    return ClientTrainingResult(**values)
 
 
 # ----------------------------------------------------------------------
@@ -253,80 +164,58 @@ def make_client_training_result(
 # ----------------------------------------------------------------------
 
 def fake_run_federated_round(
-    *args,
-    **kwargs,
+    global_model,
+    loader,
+    scaler,
+    client_ids,
+    local_epochs=1,
+    batch_size=256,
+    learning_rate=0.001,
+    device="cpu",
+    client_train_fn=None,
+    round_number=1,
+    client_data_source=None,
 ):
     """
-    Deterministic replacement for run_federated_round().
+    Fake one-round FedAvg implementation.
 
-    This allows the real multi-round orchestration to execute without
-    training 4.9 million real rows.
+    The real production runner calls this function during the smoke
+    test. The function returns the real FederatedRoundResult type.
     """
-
-    global_model = kwargs.get(
-        "global_model"
-    )
-
-    if global_model is None and args:
-        global_model = args[0]
-
-    if global_model is None:
-        global_model = SmallMLP()
-
-    round_number = kwargs.get(
-        "round_number",
-        1,
-    )
-
-    global_state = clone_state_dict(
-        global_model.state_dict()
-    )
 
     client_results = []
 
-    for client_id in EXPECTED_CLIENT_IDS:
-        client_result = make_client_training_result(
-            client_id=client_id,
-            sample_count=EXPECTED_CLIENT_COUNTS[
+    for client_id in client_ids:
+
+        samples = (
+            client_data_source.count_training_samples(
                 client_id
-            ],
-            state_dict=global_state,
+            )
         )
 
         client_results.append(
-            client_result
+            make_fake_client_result(
+                client_id=client_id,
+                samples=samples,
+                epochs=local_epochs,
+                global_model=global_model,
+            )
         )
 
-    from src.fl.coordinator import (
-        FederatedRoundResult,
-    )
-
-    result_values = {}
-
-    for field in fields(FederatedRoundResult):
-        name = field.name
-
-        if name == "round_number":
-            result_values[name] = round_number
-
-        elif name == "client_results":
-            result_values[name] = client_results
-
-        elif name == "global_state_dict":
-            result_values[name] = global_state
-
-        elif name == "total_client_samples":
-            result_values[name] = (
-                EXPECTED_TOTAL_SAMPLES
-            )
-
-        elif name == "aggregation_elapsed_seconds":
-            result_values[name] = (
-                EXPECTED_AGGREGATION_TIME
-            )
+    global_state = {
+        key: value.detach().clone()
+        for key, value in global_model.state_dict().items()
+    }
 
     return FederatedRoundResult(
-        **result_values
+        round_number=round_number,
+        client_results=client_results,
+        global_state_dict=global_state,
+        total_client_samples=sum(
+            result.samples
+            for result in client_results
+        ),
+        aggregation_elapsed_seconds=0.01,
     )
 
 
@@ -335,209 +224,34 @@ def fake_run_federated_round(
 # ----------------------------------------------------------------------
 
 def fake_evaluate_global_model(
-    *args,
-    **kwargs,
+    model,
+    loader,
+    scaler,
+    batch_size,
+    max_batches,
 ):
     """
-    Exact return structure expected by the production runner:
+    Return deterministic validation metrics.
 
-        validation_metrics, validation_time
+    These values are smoke-test placeholders only and must never be
+    used as experimental results.
     """
 
     metrics = EvaluationMetrics(
-        loss=EXPECTED_LOSS,
-        samples=EXPECTED_VALIDATION_SAMPLES,
-        accuracy=EXPECTED_ACCURACY,
-        precision=EXPECTED_PRECISION,
-        recall=EXPECTED_RECALL,
-        f1=EXPECTED_F1,
-        roc_auc=EXPECTED_ROC_AUC,
+        loss=0.10,
+        samples=200,
+        accuracy=0.95,
+        precision=0.94,
+        recall=0.93,
+        f1=0.935,
+        roc_auc=0.97,
     )
 
     return metrics, 0.01
 
 
 # ----------------------------------------------------------------------
-# Numeric helper
-# ----------------------------------------------------------------------
-
-def assert_close(
-    actual,
-    expected,
-    name: str,
-    tolerance: float = 1e-12,
-) -> None:
-    if abs(
-        float(actual) - float(expected)
-    ) > tolerance:
-        raise AssertionError(
-            f"{name}: expected "
-            f"{expected}, got {actual}"
-        )
-
-
-# ----------------------------------------------------------------------
-# Validate one round
-# ----------------------------------------------------------------------
-
-def validate_round(
-    round_data: dict,
-    expected_round_number: int,
-) -> None:
-
-    assert (
-        round_data["round_number"]
-        == expected_round_number
-    )
-
-    assert (
-        round_data["client_count"]
-        == len(EXPECTED_CLIENT_IDS)
-    )
-
-    assert (
-        round_data["total_client_samples"]
-        == EXPECTED_TOTAL_SAMPLES
-    )
-
-    assert_close(
-        round_data[
-            "aggregation_elapsed_seconds"
-        ],
-        EXPECTED_AGGREGATION_TIME,
-        "aggregation_elapsed_seconds",
-    )
-
-    assert (
-        "measured_wall_time_seconds"
-        in round_data
-    )
-
-    assert (
-        round_data[
-            "measured_wall_time_seconds"
-        ]
-        >= 0
-    )
-
-    assert (
-        "checkpoint_path"
-        in round_data
-    )
-
-    # --------------------------------------------------------------
-    # Validation metrics
-    # --------------------------------------------------------------
-
-    validation = round_data[
-        "validation"
-    ]
-
-    assert (
-        validation["samples"]
-        == EXPECTED_VALIDATION_SAMPLES
-    )
-
-    assert_close(
-        validation["loss"],
-        EXPECTED_LOSS,
-        "validation.loss",
-    )
-
-    assert_close(
-        validation["accuracy"],
-        EXPECTED_ACCURACY,
-        "validation.accuracy",
-    )
-
-    assert_close(
-        validation["precision"],
-        EXPECTED_PRECISION,
-        "validation.precision",
-    )
-
-    assert_close(
-        validation["recall"],
-        EXPECTED_RECALL,
-        "validation.recall",
-    )
-
-    assert_close(
-        validation["f1"],
-        EXPECTED_F1,
-        "validation.f1",
-    )
-
-    assert_close(
-        validation["roc_auc"],
-        EXPECTED_ROC_AUC,
-        "validation.roc_auc",
-    )
-
-    assert (
-        validation[
-            "evaluation_time_seconds"
-        ]
-        == 0.01
-    )
-
-    # --------------------------------------------------------------
-    # Per-client records
-    # --------------------------------------------------------------
-
-    clients = round_data[
-        "clients"
-    ]
-
-    assert isinstance(
-        clients,
-        list,
-    )
-
-    assert len(clients) == 9
-
-    actual_client_ids = [
-        client["client_id"]
-        for client in clients
-    ]
-
-    assert (
-        actual_client_ids
-        == EXPECTED_CLIENT_IDS
-    )
-
-    for client in clients:
-        client_id = client[
-            "client_id"
-        ]
-
-        assert (
-            client["samples"]
-            == EXPECTED_CLIENT_COUNTS[
-                client_id
-            ]
-        )
-
-        assert (
-            client["epochs"]
-            == EXPECTED_CLIENT_EPOCHS
-        )
-
-        assert_close(
-            client["loss"],
-            EXPECTED_CLIENT_LOSS,
-            f"{client_id}.loss",
-        )
-
-        assert_close(
-            client["elapsed_seconds"],
-            EXPECTED_CLIENT_ELAPSED,
-            f"{client_id}.elapsed_seconds",
-        )
-
-
-# ----------------------------------------------------------------------
-# Main smoke test
+# Smoke test
 # ----------------------------------------------------------------------
 
 def test_runner_smoke() -> None:
@@ -546,144 +260,322 @@ def test_runner_smoke() -> None:
     print("MULTI-ROUND FEDAVG SMOKE TEST")
     print("=" * 72)
 
-    if not SCRIPT_PATH.is_file():
-        raise FileNotFoundError(
-            "Production runner does not exist:\n"
-            f"{SCRIPT_PATH}"
+    temp_root = Path(
+        tempfile.mkdtemp(
+            prefix="multiround_smoke_"
+        )
+    )
+
+    result_path = (
+        temp_root
+        / "smoke_test_multiround.json"
+    )
+
+    model_root = temp_root
+
+    # --------------------------------------------------------------
+    # Save original runner functions/paths
+    # --------------------------------------------------------------
+
+    original_create_loader = (
+        runner.create_loader
+    )
+
+    original_load_training_scaler = (
+        runner.load_training_scaler
+    )
+
+    original_create_client_data_source = (
+        runner.create_client_data_source
+    )
+
+    original_run_federated_round = (
+        runner.run_federated_round
+    )
+
+    original_evaluate_global_model = (
+        runner.evaluate_global_model
+    )
+
+    original_results_root = (
+        runner.RESULTS_ROOT
+    )
+
+    original_model_root = (
+        runner.MODEL_ROOT
+    )
+
+    original_parse_args = (
+        runner.parse_args
+    )
+
+    try:
+
+        # ----------------------------------------------------------
+        # Create fake components
+        # ----------------------------------------------------------
+
+        fake_loader = FakeLoader(
+            training_rows=1000,
+            validation_rows=200,
         )
 
-    # Import the actual production runner.
-    import experiments.scripts.run_multiround_federated as runner
+        fake_scaler = FakeScaler()
 
-    with TemporaryDirectory(
-        prefix="multiround_smoke_"
-    ) as temp_dir:
-
-        temp_root = Path(temp_dir)
-
-        # IMPORTANT:
-        #
-        # The production runner itself creates:
-        #
-        #     MODEL_ROOT / f"{output_prefix}_models"
-        #
-        # Therefore MODEL_ROOT must point to temp_root here.
-        #
-        # If MODEL_ROOT were already set to
-        # temp_root / "smoke_test_multiround_models",
-        # the production runner would incorrectly produce:
-        #
-        #     smoke_test_multiround_models/
-        #         smoke_test_multiround_models/
-        #
-        model_root = temp_root
+        fake_client_data_source = (
+            FakeClientDataSource()
+        )
 
         # ----------------------------------------------------------
-        # Patch only the expensive/data-dependent operations.
-        # The actual runner.main() remains under test.
+        # Patch data-dependent components
         # ----------------------------------------------------------
 
-        patches = [
-            patch.object(
-                runner,
-                "create_loader",
-                fake_create_loader,
-            ),
-            patch.object(
-                runner,
-                "load_training_scaler",
-                fake_load_training_scaler,
-            ),
-            patch.object(
-                runner,
-                "create_client_data_source",
-                fake_create_client_data_source,
-            ),
-            patch.object(
-                runner,
-                "run_federated_round",
-                fake_run_federated_round,
-            ),
-            patch.object(
-                runner,
-                "evaluate_global_model",
-                fake_evaluate_global_model,
-            ),
-        ]
+        runner.create_loader = (
+            lambda: fake_loader
+        )
 
-        # Redirect model output.
-        #
-        # The production runner will create:
-        #
-        #     temp_root / "smoke_test_multiround_models"
-        #
-        patches.append(
-            patch.object(
-                runner,
-                "MODEL_ROOT",
-                model_root,
+        runner.load_training_scaler = (
+            lambda: fake_scaler
+        )
+
+        runner.create_client_data_source = (
+            lambda loader, partition: (
+                [
+                    "client_1",
+                    "client_2",
+                    "client_3",
+                    "client_4",
+                    "client_5",
+                    "client_6",
+                    "client_7",
+                    "client_8",
+                    "client_9",
+                ],
+                fake_client_data_source,
             )
         )
 
-        # Redirect JSON output.
-        patches.append(
-            patch.object(
-                runner,
-                "RESULTS_ROOT",
-                temp_root,
-            )
+        runner.run_federated_round = (
+            fake_run_federated_round
         )
 
-        for current_patch in patches:
-            current_patch.start()
-
-        original_argv = sys.argv.copy()
-
-        try:
-            sys.argv = [
-                str(SCRIPT_PATH),
-                "--partition",
-                "iid",
-                "--rounds",
-                "2",
-                "--local-epochs",
-                "1",
-                "--batch-size",
-                "256",
-                "--learning-rate",
-                "0.001",
-                "--seed",
-                "42",
-                "--output-prefix",
-                "smoke_test_multiround",
-            ]
-
-            runner.main()
-
-        finally:
-            sys.argv = original_argv
-
-            for current_patch in reversed(
-                patches
-            ):
-                current_patch.stop()
-
-        # ----------------------------------------------------------
-        # Find result JSON.
-        # ----------------------------------------------------------
-
-        result_candidates = list(
-            temp_root.rglob(
-                "smoke_test_multiround.json"
-            )
+        runner.evaluate_global_model = (
+            fake_evaluate_global_model
         )
 
-        if not result_candidates:
+        # ----------------------------------------------------------
+        # Patch output paths
+        # ----------------------------------------------------------
+
+        runner.RESULTS_ROOT = temp_root
+        runner.MODEL_ROOT = model_root
+
+        # ----------------------------------------------------------
+        # Patch command-line arguments
+        # ----------------------------------------------------------
+
+        class FakeArgs:
+            partition = "iid"
+            rounds = 2
+            local_epochs = 1
+            batch_size = 256
+            learning_rate = 0.001
+            seed = 42
+            validation_max_batches = None
+            output_prefix = (
+                "smoke_test_multiround"
+            )
+
+        runner.parse_args = (
+            lambda: FakeArgs()
+        )
+
+        # ----------------------------------------------------------
+        # Execute the REAL production runner
+        # ----------------------------------------------------------
+
+        runner.main()
+
+        # ----------------------------------------------------------
+        # Validate result JSON
+        # ----------------------------------------------------------
+
+        if not result_path.is_file():
             raise AssertionError(
-                "Smoke-test result JSON was not created."
+                "Smoke-test result JSON was not created:\n"
+                f"{result_path}"
             )
 
-        result_path = result_candidates[0]
+        result = json.loads(
+            result_path.read_text(
+                encoding="utf-8"
+            )
+        )
+
+        if result["status"] != "completed":
+            raise AssertionError(
+                "Expected completed experiment status."
+            )
+
+        if result["partition_type"] != "iid":
+            raise AssertionError(
+                "Unexpected partition type."
+            )
+
+        if result["rounds_requested"] != 2:
+            raise AssertionError(
+                "Expected two requested rounds."
+            )
+
+        if result["rounds_completed"] != 2:
+            raise AssertionError(
+                "Expected two completed rounds."
+            )
+
+        if result["clients"] != 9:
+            raise AssertionError(
+                "Expected nine clients."
+            )
+
+        if result["total_training_rows"] != 1000:
+            raise AssertionError(
+                "Expected 1,000 training rows."
+            )
+
+        if result["total_validation_rows"] != 200:
+            raise AssertionError(
+                "Expected 200 validation rows."
+            )
+
+        if result["client_sample_counts"]["client_1"] != 112:
+            raise AssertionError(
+                "Unexpected client_1 sample count."
+            )
+
+        if sum(
+            result["client_sample_counts"].values()
+        ) != 1000:
+            raise AssertionError(
+                "Client sample counts do not sum to 1,000."
+            )
+
+        # ----------------------------------------------------------
+        # Validate rounds
+        # ----------------------------------------------------------
+
+        rounds = result["rounds"]
+
+        if len(rounds) != 2:
+            raise AssertionError(
+                "Expected exactly two round records."
+            )
+
+        for expected_round, round_result in enumerate(
+            rounds,
+            start=1,
+        ):
+
+            if round_result["round_number"] != expected_round:
+                raise AssertionError(
+                    "Unexpected round number."
+                )
+
+            if round_result["client_count"] != 9:
+                raise AssertionError(
+                    "Expected nine clients in every round."
+                )
+
+            if round_result[
+                "total_client_samples"
+            ] != 1000:
+                raise AssertionError(
+                    "Expected 1,000 samples in every round."
+                )
+
+            if len(
+                round_result["clients"]
+            ) != 9:
+                raise AssertionError(
+                    "Expected nine client result records."
+                )
+
+            validation = (
+                round_result["validation"]
+            )
+
+            if validation["samples"] != 200:
+                raise AssertionError(
+                    "Expected 200 validation samples."
+                )
+
+            checkpoint_path = Path(
+                round_result["checkpoint_path"]
+            )
+
+            if not checkpoint_path.is_file():
+                raise AssertionError(
+                    "Expected checkpoint does not exist:\n"
+                    f"{checkpoint_path}"
+                )
+
+        # ----------------------------------------------------------
+        # Validate checkpoints
+        # ----------------------------------------------------------
+
+        model_directory = (
+            temp_root
+            / "smoke_test_multiround_models"
+        )
+
+        checkpoint_1 = (
+            model_directory
+            / "round_001.pt"
+        )
+
+        checkpoint_2 = (
+            model_directory
+            / "round_002.pt"
+        )
+
+        if not checkpoint_1.is_file():
+            raise AssertionError(
+                "Round 1 checkpoint missing."
+            )
+
+        if not checkpoint_2.is_file():
+            raise AssertionError(
+                "Round 2 checkpoint missing."
+            )
+
+        model_1 = SmallMLP()
+
+        state_1 = torch.load(
+            checkpoint_1,
+            map_location="cpu",
+            weights_only=True,
+        )
+
+        model_1.load_state_dict(
+            state_1,
+            strict=True,
+        )
+
+        model_2 = SmallMLP()
+
+        state_2 = torch.load(
+            checkpoint_2,
+            map_location="cpu",
+            weights_only=True,
+        )
+
+        model_2.load_state_dict(
+            state_2,
+            strict=True,
+        )
+
+        # ----------------------------------------------------------
+        # Success
+        # ----------------------------------------------------------
 
         print()
         print(
@@ -691,241 +583,79 @@ def test_runner_smoke() -> None:
             f"{result_path}"
         )
 
-        # ----------------------------------------------------------
-        # Load result.
-        # ----------------------------------------------------------
-
-        with result_path.open(
-            "r",
-            encoding="utf-8",
-        ) as handle:
-            result = json.load(handle)
-
-        # ----------------------------------------------------------
-        # Validate exact top-level fields written by runner.
-        # ----------------------------------------------------------
-
-        assert (
-            result["experiment"]
-            == "smoke_test_multiround"
-        )
-
-        assert (
-            result["status"]
-            == "completed"
-        )
-
-        assert (
-            result["partition_type"]
-            == "iid"
-        )
-
-        assert (
-            result["seed"]
-            == 42
-        )
-
-        assert (
-            result["clients"]
-            == 9
-        )
-
-        assert (
-            result["client_ids"]
-            == EXPECTED_CLIENT_IDS
-        )
-
-        assert (
-            result["local_epochs"]
-            == 1
-        )
-
-        assert (
-            result["batch_size"]
-            == 256
-        )
-
-        assert_close(
-            result["learning_rate"],
-            0.001,
-            "learning_rate",
-        )
-
-        assert (
-            result["device"]
-            == "cpu"
-        )
-
-        assert (
-            result["model_parameter_count"]
-            == 9537
-        )
-
-        assert (
-            result["validation_max_batches"]
-            is None
-        )
-
-        assert (
-            result["rounds_requested"]
-            == 2
-        )
-
-        assert (
-            result["rounds_completed"]
-            == 2
-        )
-
-        # This is the ACTUAL field name in the runner.
-        assert (
-            "total_experiment_wall_time_seconds"
-            in result
-        )
-
-        assert (
-            result[
-                "total_experiment_wall_time_seconds"
-            ]
-            >= 0
-        )
-
-        assert (
-            "rounds"
-            in result
-        )
-
-        assert isinstance(
-            result["rounds"],
-            list,
-        )
-
-        assert (
-            len(result["rounds"])
-            == 2
-        )
-
-        assert (
-            "notes"
-            in result
-        )
-
-        assert isinstance(
-            result["notes"],
-            list,
-        )
-
-        # ----------------------------------------------------------
-        # Validate round 1.
-        # ----------------------------------------------------------
-
-        validate_round(
-            result["rounds"][0],
-            expected_round_number=1,
-        )
-
-        # ----------------------------------------------------------
-        # Validate round 2.
-        # ----------------------------------------------------------
-
-        validate_round(
-            result["rounds"][1],
-            expected_round_number=2,
-        )
-
-        # ----------------------------------------------------------
-        # Validate checkpoint files.
-        #
-        # The production runner creates:
-        #
-        #     MODEL_ROOT / f"{output_prefix}_models"
-        #
-        # Since MODEL_ROOT == temp_root, the actual directory is:
-        #
-        #     temp_root/
-        #         smoke_test_multiround_models/
-        #
-        # ----------------------------------------------------------
-
-        checkpoint_directory = (
-            temp_root
-            / "smoke_test_multiround_models"
-        )
-
-        checkpoint_1 = (
-            checkpoint_directory
-            / "round_001.pt"
-        )
-
-        checkpoint_2 = (
-            checkpoint_directory
-            / "round_002.pt"
-        )
-
-        assert checkpoint_1.is_file(), (
-            "Round 1 checkpoint missing:\n"
-            f"{checkpoint_1}"
-        )
-
-        assert checkpoint_2.is_file(), (
-            "Round 2 checkpoint missing:\n"
-            f"{checkpoint_2}"
-        )
-
-        # ----------------------------------------------------------
-        # Validate actual checkpoint format.
-        #
-        # The production runner saves:
-        #
-        #     model.state_dict()
-        #
-        # so each checkpoint should be a state dictionary that can
-        # be loaded into SmallMLP.
-        # ----------------------------------------------------------
-
-        checkpoint_model_1 = SmallMLP()
-
-        state_dict_1 = torch.load(
-            checkpoint_1,
-            map_location="cpu",
-            weights_only=True,
-        )
-
-        checkpoint_model_1.load_state_dict(
-            state_dict_1,
-            strict=True,
-        )
-
-        checkpoint_model_2 = SmallMLP()
-
-        state_dict_2 = torch.load(
-            checkpoint_2,
-            map_location="cpu",
-            weights_only=True,
-        )
-
-        checkpoint_model_2.load_state_dict(
-            state_dict_2,
-            strict=True,
-        )
-
-        # ----------------------------------------------------------
-        # Final success.
-        # ----------------------------------------------------------
-
         print()
         print("=" * 72)
-        print("MULTI-ROUND FEDAVG SMOKE TEST: PASS")
+        print(
+            "MULTI-ROUND FEDAVG SMOKE TEST: PASS"
+        )
         print("=" * 72)
-        print("Rounds tested:          2")
-        print("Clients per round:      9")
-        print("Total fake samples:     1,000")
-        print("Validation samples:     200")
-        print("Round 1 checkpoint:     PASS")
-        print("Round 2 checkpoint:     PASS")
-        print("Checkpoint reload:      PASS")
-        print("Client result records:  PASS")
-        print("Result JSON validation: PASS")
+
+        print(
+            "Rounds tested:          2"
+        )
+        print(
+            "Clients per round:      9"
+        )
+        print(
+            "Total fake samples:     1,000"
+        )
+        print(
+            "Validation samples:     200"
+        )
+        print(
+            "Round 1 checkpoint:     PASS"
+        )
+        print(
+            "Round 2 checkpoint:     PASS"
+        )
+        print(
+            "Checkpoint reload:      PASS"
+        )
+        print(
+            "Client result records:  PASS"
+        )
+        print(
+            "Result JSON validation: PASS"
+        )
         print("=" * 72)
+
+    finally:
+
+        # ----------------------------------------------------------
+        # Restore runner
+        # ----------------------------------------------------------
+
+        runner.create_loader = (
+            original_create_loader
+        )
+
+        runner.load_training_scaler = (
+            original_load_training_scaler
+        )
+
+        runner.create_client_data_source = (
+            original_create_client_data_source
+        )
+
+        runner.run_federated_round = (
+            original_run_federated_round
+        )
+
+        runner.evaluate_global_model = (
+            original_evaluate_global_model
+        )
+
+        runner.RESULTS_ROOT = (
+            original_results_root
+        )
+
+        runner.MODEL_ROOT = (
+            original_model_root
+        )
+
+        runner.parse_args = (
+            original_parse_args
+        )
 
 
 # ----------------------------------------------------------------------

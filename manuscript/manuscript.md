@@ -56,7 +56,7 @@ This paper addresses the research gap through a controlled empirical study with 
 The primary contributions of this study are:
 
 1. A reproducible empirical comparison of performance trade-offs across centralized, federated (IID and device-level Non-IID), and local-only training topologies on the N-BaIoT intrusion detection benchmark.
-2. A duplicate-aware frozen dataset split strategy that enforces `(device, feature_hash)` grouping to prevent feature-vector data leakage across train/validation/test boundaries.
+2. A duplicate-aware frozen dataset split strategy that enforces `(device, feature_hash)` grouping within each device partition to prevent intra-device feature-vector data leakage across train/validation/test boundaries.
 3. Transparent communication payload accounting and host-side computational resource characterization, with explicit documentation of accounting scope boundaries.
 4. Explicit documentation of 18 methodological limitations and threats to validity, enabling correct scientific interpretation and supporting reliable replication.
 
@@ -419,7 +419,7 @@ In the natural device-level Non-IID condition, dataset sizes varied substantiall
 ### 6.3 Federated Convergence Under Device-Level Heterogeneity
 The validation trajectories recorded across the 3 communication rounds provide insights into the early-stage convergence dynamics of FedAvg under differing data distributions. 
 
-For Controlled IID FedAvg, the global model achieved high validation performance in Round 1 (F1: **0.998890**, ROC-AUC: **0.999194**) and exhibited modest incremental changes through Round 2 (F1: **0.999122**, ROC-AUC: **0.999705**) and Round 3 (F1: **0.999403**, ROC-AUC: **0.999801**). The total validation F1 change from Round 1 to Round 3 was **+0.000513**, reflecting rapid early alignment due to homogeneous local data distributions.
+For Controlled IID FedAvg, the global model achieved high validation performance in Round 1 (F1: **0.998890**, ROC-AUC: **0.999194**) and exhibited modest incremental changes through Round 2 (F1: **0.999122**, ROC-AUC: **0.999705**) and Round 3 (F1: **0.999403**, ROC-AUC: **0.999801**). The total validation F1 change from Round 1 to Round 3 was **+0.000513**, consistent with rapid early alignment under homogeneous local data distributions.
 
 Conversely, Device Non-IID FedAvg displayed a pronounced convergence curve over the 3 measured rounds:
 * In Round 1, the model achieved a validation F1 of **0.959030** but a low ROC-AUC of **0.537014** (with validation loss at **0.828505**), indicating that initial parameter aggregation across heterogeneous device updates produced uncalibrated probability estimates across the global validation set.

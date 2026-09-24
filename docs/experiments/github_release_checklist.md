@@ -87,9 +87,7 @@ Complete all items before creating the GitHub Release.
 
 ## 8. License
 
-- [ ] **LICENSE file is missing** — a license must be selected and added before public release.
-  - Common choices for academic code: MIT License, Apache 2.0, or GNU GPLv3.
-  - **Action required:** Decide on a license and add `LICENSE` file to the repository root before creating the GitHub Release.
+- [x] **LICENSE file present** — MIT License added to repository root.
 
 ---
 
@@ -105,6 +103,6 @@ Complete all items before creating the GitHub Release.
 
 ## Status
 
-**Stage 13 preparation is complete.** The repository is structurally ready for a GitHub release.
+**Stage 13 preparation is complete. All pre-release checks are satisfied.**
 
-The only outstanding item before the actual release is the **LICENSE file** (Section 8 above). This requires a decision from the repository owner on which open-source license to apply.
+The repository is ready for the GitHub Release to be created using tag `v1.0.0`.

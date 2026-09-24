@@ -3,7 +3,7 @@
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![PyTorch 2.x](https://img.shields.io/badge/PyTorch-2.x-orange.svg)](https://pytorch.org/)
 [![Tests](https://img.shields.io/badge/tests-105%20passed-green.svg)](tests/)
-[![License](https://img.shields.io/badge/license-TBD-lightgrey.svg)](#license)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **Note:** This manuscript is a pre-print and has not yet been peer-reviewed or published. No DOI has been assigned.
 
@@ -166,9 +166,11 @@ The following scope boundaries are explicitly documented in the manuscript (Sect
 
 ## License
 
-> **A LICENSE file has not yet been added to this repository.**  
-> A license must be selected before the public GitHub Release is created.  
-> Common choices for academic research code: MIT License, Apache 2.0, or GNU GPLv3.
+This repository is released under the **[MIT License](LICENSE)**.
+
+You are free to use, modify, and distribute this code and reproducibility package, provided the original copyright notice and license text are retained.
+
+> The dataset used in this study (N-BaIoT) is distributed separately under its own terms. Please refer to the [UCI Machine Learning Repository](https://archive.ics.uci.edu/) for its license conditions.
 
 ---
 

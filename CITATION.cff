@@ -18,8 +18,8 @@ abstract: >
   single random seed (42) and a 3-round federated training horizon.
   The study is a pre-print and has not yet been peer-reviewed.
 version: 1.0.0
+license: MIT
 repository-code: https://github.com/Moazzam9/federated-iot-ids
-license-url: https://github.com/Moazzam9/federated-iot-ids
 keywords:
   - federated learning
   - IoT intrusion detection

@@ -313,7 +313,7 @@ Comparing the Controlled IID FedAvg experiment against the Device Non-IID FedAvg
 
 On the global holdout test set, Controlled IID FedAvg achieved an F1-Score of **0.999430**, whereas Device Non-IID FedAvg reached **0.975696**, producing an observed performance margin of **0.023734** (~2.37 percentage points). In the IID condition, training samples were redistributed such that each client received an approximately equal volume (~549,313 rows) with identical class proportions matching the global dataset. This uniform distribution produces a more similar class composition across clients, providing a less heterogeneous training condition than the natural device-level partition.
 
-In the natural device-level Non-IID condition, dataset sizes varied substantially across clients (ranging from 248,850 rows for `Ennio_Doorbell` to 769,074 rows for `Philips_B120N10_Baby_Monitor`), reflecting the natural traffic volume and feature characteristics of individual IoT device types. Local parameter updates were influenced by device-specific traffic distributions, introducing gradient diversity during local training epochs. While sample-weighted FedAvg aggregation successfully combined these local updates to reach a test F1-Score of **0.975696**, the non-IID data distribution introduced gradient variance across clients. The lower F1 observed under the device-level partition is consistent with an effect of client-level data heterogeneity in this experimental setting.
+In the natural device-level Non-IID condition, dataset sizes varied substantially across clients (ranging from 248,850 rows for `Ennio_Doorbell` to 769,074 rows for `Philips_B120N10_Baby_Monitor`), reflecting the natural traffic volume and feature characteristics of individual IoT device types. Local parameter updates were influenced by device-specific traffic distributions. While sample-weighted FedAvg aggregation combined these local updates to reach a test F1-Score of **0.975696**, the natural device-level partition presented a more heterogeneous training condition than the controlled IID partition. The lower F1 observed under the device-level partition is consistent with an effect of client-level data heterogeneity in this experimental setting.
 
 ### 6.3 Federated Convergence Under Device-Level Heterogeneity
 The validation trajectories recorded across the 3 communication rounds provide insights into the early-stage convergence dynamics of FedAvg under differing data distributions. 
@@ -457,5 +457,37 @@ Threats to external validity concern the generalizability of the findings to bro
 
 ---
 
-## 8. Conclusion
-*(Section to be completed in Stage 5)*
+## 8. Conclusion and Future Work
+
+### 8.1 Conclusion
+This study presented a controlled empirical investigation of federated learning for IoT intrusion detection using the N-BaIoT dataset. The evaluation compared standard Federated Averaging (FedAvg) under natural device-level Non-IID partitions and an artificial Controlled IID partition against two reference topologies: a centralized global baseline and isolated local-only models across nine commercial IoT devices.
+
+Within the evaluated experimental setup (9,537-parameter `SmallMLP`, binary classification, 4,943,824 training rows, 1,059,388 test rows, single seed 42, 3 training rounds or epochs), the empirical findings indicate:
+
+1. **Centralized Baseline Reference:** The Centralized model reached a global holdout test F1-Score of **0.997097** (ROC-AUC: **0.996899**), establishing a baseline for network-wide detection performance when training data are centrally aggregated.
+2. **Local-Only Model Heterogeneity:** Training isolated models per device eliminated network parameter exchange but produced substantial performance dispersion across device types. Test F1-Scores ranged from **0.913371** (Philips Baby Monitor) to **0.999599** (SimpleHome 1003 Security Camera), yielding an unweighted macro-average F1-Score of **0.971422** and a sample-weighted average F1-Score of **0.969684** on local same-device test subsets.
+3. **Device-Level Non-IID FedAvg:** When trained across natural device-level partitions, FedAvg achieved a global holdout test F1-Score of **0.975696** (ROC-AUC: **0.992387**). Over the 3 measured rounds, validation ROC-AUC rose from **0.537014** (Round 1) to **0.991824** (Round 3), demonstrating early-stage metric progression across heterogeneous device streams.
+4. **Controlled IID Benchmark:** Under class-stratified IID partitioning, FedAvg achieved a global holdout test F1-Score of **0.999430** (ROC-AUC: **0.999859**), exhibiting small metric changes from Round 1 (F1: **0.998890**) through Round 3 (F1: **0.999403**).
+
+These observed results show that client data distribution influenced federated model performance in this experimental setting. The Controlled IID benchmark achieved global test metrics closely matching the centralized reference, whereas the natural device-level partition reached a lower final test F1-Score and exhibited larger metric changes between early and later validation rounds.
+
+From an efficiency perspective, the compact `SmallMLP` parameter footprint (9,537 parameters; 38,148 bytes per state dictionary) required a cumulative theoretical parameter payload of **2,059,992 bytes** (~1.96 MiB) across 9 clients over 3 rounds. Host CPU process measurements recorded peak process-tree RSS memory between **610.94 MiB** and **668.36 MiB**, with execution wall-clock runtimes ranging from **3,402.99 s** (~56.7 min for Local-Only) to **16,290.68 s** (~271.5 min for Controlled IID FedAvg).
+
+In summary, the study provides reproducible empirical evidence regarding performance trade-offs across centralized, local, and federated learning topologies under IID and Non-IID device distributions. However, these findings are bounded by the specific experimental configuration evaluated and do not establish universal statements regarding all IoT network environments or federated learning protocols.
+
+### 8.2 Future Work
+To address the methodological and scope boundaries documented in Section 7, future research should explore the following directions:
+
+1. **Multi-Seed Statistical Evaluation:** Repeat experimental executions across multiple random seeds to measure statistical variance, report standard deviations, and compute confidence intervals for performance and convergence metrics.
+2. **Extended Federated Training Horizons:** Evaluate federated training across extended round schedules beyond the 3-round horizon to empirically characterize long-term asymptotic convergence tails under non-IID device skew.
+3. **Decentralized and Federated Preprocessing:** Investigate federated preprocessing protocols (such as federated calculation of feature means and variances) or local client feature normalization strategies to eliminate reliance on centrally pre-fitted global `StandardScaler` parameters.
+4. **Heterogeneous and Dynamic Client Environments:** Benchmark federated performance under partial client participation ($C < 1.0$), client dropout, straggler delays, severe class/volume imbalance, and non-stationary temporal traffic drift.
+5. **Broader Intrusion Datasets and Multi-Class Evaluation:** Extend empirical evaluations to additional IoT intrusion detection benchmarks (such as TON_IoT, Bot-IoT, or CICIoT2023) and multi-class attack classification taxonomies.
+6. **Alternative Federated Algorithms:** Compare standard FedAvg against federated aggregation algorithms specifically designed for non-IID distributions (such as FedProx, SCAFFOLD, or FedNova) as well as personalized federated learning frameworks.
+7. **Alternative Model Architecture Scope:** Evaluate additional model architectures, including decision trees, linear models, CNNs, LSTMs, and deep neural network variants tailored for resource-constrained edge computing.
+8. **Physical Network Socket and Protocol Benchmarking:** Measure actual network socket traffic, transport framing overheads (TCP/IP, HTTP/2, gRPC), serialization latency, packet loss, bandwidth constraints, compression, and TLS encryption costs in a networked environment.
+9. **Formal Privacy and Security Primitives:** Incorporate and empirically evaluate Differential Privacy ($\epsilon, \delta$), Secure Aggregation protocols, and resilience against adversarial security threat models, including membership inference, parameter reconstruction, and client poisoning attacks.
+10. **Physical Edge Hardware Deployment:** Benchmark model training and inference on physical IoT edge hardware nodes (such as micro-controllers, Raspberry Pi devices, or edge gateways) to measure physical RAM limits, CPU thermal throttling, and physical battery/power consumption.
+11. **Hierarchical and Asynchronous Topologies:** Study gateway-assisted hierarchical aggregation, asynchronous client parameter updates, and network fault tolerance in distributed IoT deployments.
+12. **Cross-Dataset Generalization:** Evaluate cross-dataset transferability and model generalization across heterogeneous physical deployment environments and unseen IoT traffic distributions.
+

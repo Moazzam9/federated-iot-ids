@@ -38,6 +38,12 @@ IID_PATH = (
     / "iid_3round_seed42.json"
 )
 
+FINAL_TEST_PATH = (
+    RESULTS_RAW
+    / "final_test_evaluation"
+    / "final_test_evaluation.json"
+)
+
 COMMUNICATION_PATH = (
     RESULTS_RAW
     / "communication"
@@ -92,6 +98,10 @@ OUTPUT_COMMUNICATION = (
 
 OUTPUT_RESOURCE = (
     ANALYSIS_DIR / "resource_metrics.csv"
+)
+
+OUTPUT_FINAL_TEST = (
+    ANALYSIS_DIR / "final_test_metrics.csv"
 )
 
 
@@ -213,6 +223,7 @@ def validate_source_results(
     local_only: dict[str, Any],
     device_non_iid: dict[str, Any],
     iid: dict[str, Any],
+    final_test: dict[str, Any],
     communication: dict[str, Any],
 ) -> None:
     """Validate the minimum expected structure before analysis."""
@@ -254,6 +265,36 @@ def validate_source_results(
     )
 
     require_key(
+        final_test,
+        "centralized",
+        "final test evaluation",
+    )
+
+    require_key(
+        final_test,
+        "device_non_iid_fedavg",
+        "final test evaluation",
+    )
+
+    require_key(
+        final_test,
+        "iid_fedavg",
+        "final test evaluation",
+    )
+
+    require_key(
+        final_test,
+        "local_only",
+        "final test evaluation",
+    )
+
+    require_key(
+        final_test,
+        "frozen_global_test_rows",
+        "final test evaluation",
+    )
+
+    require_key(
         communication,
         "measurement_method",
         "communication results",
@@ -289,6 +330,38 @@ def validate_source_results(
     ):
         raise ValueError(
             "IID rounds must be a list."
+        )
+
+    if not isinstance(
+        final_test["centralized"],
+        dict,
+    ):
+        raise ValueError(
+            "Final test centralized result must be an object."
+        )
+
+    if not isinstance(
+        final_test["device_non_iid_fedavg"],
+        dict,
+    ):
+        raise ValueError(
+            "Final test device Non-IID result must be an object."
+        )
+
+    if not isinstance(
+        final_test["iid_fedavg"],
+        dict,
+    ):
+        raise ValueError(
+            "Final test IID result must be an object."
+        )
+
+    if not isinstance(
+        final_test["local_only"],
+        dict,
+    ):
+        raise ValueError(
+            "Final test local-only result must be an object."
         )
 
     if len(device_non_iid["rounds"]) != 3:
@@ -337,6 +410,34 @@ def validate_resource(
         "wall_time_seconds",
         source_name,
     )
+
+
+def validate_final_test_metrics(
+    result: dict[str, Any],
+    source_name: str,
+) -> None:
+    """Validate one final-test metric object."""
+
+    for key in (
+        "samples",
+        "loss",
+        "accuracy",
+        "precision",
+        "recall",
+        "f1",
+        "roc_auc",
+        "evaluation_time_seconds",
+    ):
+        value = require_key(
+            result,
+            key,
+            source_name,
+        )
+
+        if not isinstance(value, (int, float)):
+            raise TypeError(
+                f"{source_name}.{key} must be numeric."
+            )
 
 
 # ----------------------------------------------------------------------
@@ -465,6 +566,326 @@ def build_experiment_comparison(
             ]["measurement"]["peak_rss_mib"],
         },
     ]
+
+    return rows
+
+
+# ----------------------------------------------------------------------
+# Final test-set analysis
+# ----------------------------------------------------------------------
+
+
+def build_final_test_metrics(
+    final_test: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """
+    Build a final holdout-test table.
+
+    Global-test experiments:
+        centralized
+        device_non_iid_fedavg
+        iid_fedavg
+
+    Local-only models are evaluated on their corresponding
+    same-device test sets and are therefore represented separately.
+    """
+
+    rows: list[dict[str, Any]] = []
+
+    global_experiments = (
+        ("centralized", final_test["centralized"]),
+        (
+            "device_non_iid_fedavg",
+            final_test["device_non_iid_fedavg"],
+        ),
+        ("iid_fedavg", final_test["iid_fedavg"]),
+    )
+
+    for experiment_name, result in global_experiments:
+        validate_final_test_metrics(
+            result,
+            f"final test {experiment_name}",
+        )
+
+        rows.append(
+            {
+                "experiment": experiment_name,
+                "evaluation_scope": result[
+                    "evaluation_scope"
+                ],
+                "client_id": "",
+                "samples": result["samples"],
+                "loss": result["loss"],
+                "accuracy": result["accuracy"],
+                "precision": result["precision"],
+                "recall": result["recall"],
+                "f1": result["f1"],
+                "roc_auc": result["roc_auc"],
+                "evaluation_time_seconds": result[
+                    "evaluation_time_seconds"
+                ],
+            }
+        )
+
+    local_only = final_test["local_only"]
+
+    clients = require_key(
+        local_only,
+        "clients",
+        "final test local-only",
+    )
+
+    if not isinstance(clients, list):
+        raise ValueError(
+            "Final test local-only clients must be a list."
+        )
+
+    for client in clients:
+        client_id = require_key(
+            client,
+            "client_id",
+            "final test local-only client",
+        )
+
+        validate_final_test_metrics(
+            client,
+            f"final test local-only client {client_id}",
+        )
+
+        rows.append(
+            {
+                "experiment": "local_only",
+                "evaluation_scope": "same_device_test",
+                "client_id": client_id,
+                "samples": client["samples"],
+                "loss": client["loss"],
+                "accuracy": client["accuracy"],
+                "precision": client["precision"],
+                "recall": client["recall"],
+                "f1": client["f1"],
+                "roc_auc": client["roc_auc"],
+                "evaluation_time_seconds": client[
+                    "evaluation_time_seconds"
+                ],
+            }
+        )
+
+    return rows
+
+
+def build_final_test_summary(
+    final_test: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Extract the main final-test result structure while preserving
+    the distinction between global-test and same-device evaluation.
+    """
+
+    global_results = {}
+
+    for experiment_name in (
+        "centralized",
+        "device_non_iid_fedavg",
+        "iid_fedavg",
+    ):
+        result = final_test[experiment_name]
+
+        validate_final_test_metrics(
+            result,
+            f"final test {experiment_name}",
+        )
+
+        global_results[experiment_name] = {
+            "evaluation_scope": result[
+                "evaluation_scope"
+            ],
+            "samples": result["samples"],
+            "loss": result["loss"],
+            "accuracy": result["accuracy"],
+            "precision": result["precision"],
+            "recall": result["recall"],
+            "f1": result["f1"],
+            "roc_auc": result["roc_auc"],
+            "evaluation_time_seconds": result[
+                "evaluation_time_seconds"
+            ],
+        }
+
+    local_only = final_test["local_only"]
+
+    local_clients = []
+
+    for client in local_only["clients"]:
+        local_clients.append(
+            {
+                "client_id": client["client_id"],
+                "samples": client["samples"],
+                "loss": client["loss"],
+                "accuracy": client["accuracy"],
+                "precision": client["precision"],
+                "recall": client["recall"],
+                "f1": client["f1"],
+                "roc_auc": client["roc_auc"],
+                "evaluation_time_seconds": client[
+                    "evaluation_time_seconds"
+                ],
+            }
+        )
+
+    return {
+        "frozen_global_test_rows": final_test[
+            "frozen_global_test_rows"
+        ],
+        "local_only_test_rows_sum": final_test[
+            "local_only_test_rows_sum"
+        ],
+        "global_test_results": global_results,
+        "local_only": {
+            "evaluation_scope": local_only[
+                "evaluation_scope"
+            ],
+            "client_count": local_only["client_count"],
+            "clients": local_clients,
+            "macro_average": local_only[
+                "macro_average"
+            ],
+            "sample_weighted_average": local_only[
+                "sample_weighted_average"
+            ],
+            "total_evaluation_time_seconds": local_only[
+                "total_evaluation_time_seconds"
+            ],
+        },
+        "scaler": final_test["scaler"],
+    }
+
+
+def build_validation_to_test_comparison(
+    centralized: dict[str, Any],
+    device_non_iid: dict[str, Any],
+    iid: dict[str, Any],
+    final_test: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """
+    Compare validation metrics with final test metrics for models
+    that use the same global evaluation scope.
+
+    Local-only is deliberately excluded because its validation and
+    test evaluations are same-device, while the main FedAvg and
+    centralized comparisons use global validation/test sets.
+    """
+
+    centralized_history = centralized["history"]
+
+    best_epoch = int(
+        centralized["best_epoch"]
+    )
+
+    centralized_best = next(
+        record
+        for record in centralized_history
+        if record["epoch"] == best_epoch
+    )
+
+    validation_sources = {
+        "centralized": {
+            "evaluation_scope": (
+                "global_validation_best_epoch"
+            ),
+            "metrics": {
+                "loss": centralized_best[
+                    "validation_loss"
+                ],
+                "accuracy": centralized_best[
+                    "validation_accuracy"
+                ],
+                "precision": centralized_best[
+                    "validation_precision"
+                ],
+                "recall": centralized_best[
+                    "validation_recall"
+                ],
+                "f1": centralized_best[
+                    "validation_f1"
+                ],
+                "roc_auc": centralized_best[
+                    "validation_roc_auc"
+                ],
+            },
+        },
+        "device_non_iid_fedavg": {
+            "evaluation_scope": "global_validation_round_3",
+            "metrics": device_non_iid["rounds"][-1][
+                "validation"
+            ],
+        },
+        "iid_fedavg": {
+            "evaluation_scope": "global_validation_round_3",
+            "metrics": iid["rounds"][-1][
+                "validation"
+            ],
+        },
+    }
+
+    rows: list[dict[str, Any]] = []
+
+    metric_names = (
+        "loss",
+        "accuracy",
+        "precision",
+        "recall",
+        "f1",
+        "roc_auc",
+    )
+
+    for experiment_name in (
+        "centralized",
+        "device_non_iid_fedavg",
+        "iid_fedavg",
+    ):
+        validation = validation_sources[
+            experiment_name
+        ]["metrics"]
+
+        test = final_test[
+            experiment_name
+        ]
+
+        for metric in metric_names:
+            validation_value = float(
+                validation[metric]
+            )
+
+            test_value = float(
+                test[metric]
+            )
+
+            rows.append(
+                {
+                    "experiment": experiment_name,
+                    "metric": metric,
+                    "validation_evaluation_scope": (
+                        validation_sources[
+                            experiment_name
+                        ]["evaluation_scope"]
+                    ),
+                    "test_evaluation_scope": test[
+                        "evaluation_scope"
+                    ],
+                    "validation_value": validation_value,
+                    "test_value": test_value,
+                    "test_minus_validation": (
+                        test_value
+                        - validation_value
+                    ),
+                    "percentage_change": (
+                        percentage_change(
+                            validation_value,
+                            test_value,
+                        )
+                    ),
+                }
+            )
 
     return rows
 
@@ -983,6 +1404,10 @@ def main() -> None:
         IID_PATH
     )
 
+    final_test = load_json(
+        FINAL_TEST_PATH
+    )
+
     communication = load_json(
         COMMUNICATION_PATH
     )
@@ -1007,6 +1432,7 @@ def main() -> None:
         local_only=local_only,
         device_non_iid=device_non_iid,
         iid=iid,
+        final_test=final_test,
         communication=communication,
     )
 
@@ -1025,6 +1451,23 @@ def main() -> None:
         device_non_iid=device_non_iid,
         iid=iid,
         resources=resources,
+    )
+
+    final_test_metrics = build_final_test_metrics(
+        final_test
+    )
+
+    final_test_summary = build_final_test_summary(
+        final_test
+    )
+
+    validation_to_test = (
+        build_validation_to_test_comparison(
+            centralized=centralized,
+            device_non_iid=device_non_iid,
+            iid=iid,
+            final_test=final_test,
+        )
     )
 
     fedavg_round_metrics = build_fedavg_round_metrics(
@@ -1086,6 +1529,44 @@ def main() -> None:
             "resource_peak_rss_mib",
         ],
         experiment_comparison,
+    )
+
+    write_csv(
+        OUTPUT_FINAL_TEST,
+        [
+            "experiment",
+            "evaluation_scope",
+            "client_id",
+            "samples",
+            "loss",
+            "accuracy",
+            "precision",
+            "recall",
+            "f1",
+            "roc_auc",
+            "evaluation_time_seconds",
+        ],
+        final_test_metrics,
+    )
+
+    validation_to_test_path = (
+        ANALYSIS_DIR
+        / "validation_to_test_comparison.csv"
+    )
+
+    write_csv(
+        validation_to_test_path,
+        [
+            "experiment",
+            "metric",
+            "validation_evaluation_scope",
+            "test_evaluation_scope",
+            "validation_value",
+            "test_value",
+            "test_minus_validation",
+            "percentage_change",
+        ],
+        validation_to_test,
     )
 
     write_csv(
@@ -1191,8 +1672,16 @@ def main() -> None:
             "iid_fedavg": (
                 "global validation across three FedAvg rounds"
             ),
+            "final_test": (
+                "frozen holdout test evaluation performed "
+                "after training; centralized and FedAvg "
+                "models use the global test set, while "
+                "local-only models use same-device test sets"
+            ),
         },
         "experiment_comparison": experiment_comparison,
+        "final_test_evaluation": final_test_summary,
+        "validation_to_test_comparison": validation_to_test,
         "fedavg_round_analysis": convergence,
         "local_only_device_metrics": local_only_devices,
         "client_sample_distribution": client_distribution,
@@ -1201,16 +1690,19 @@ def main() -> None:
         "derived_comparisons": derived_comparisons,
         "interpretation_boundaries": [
             "The analysis reports measured results and explicitly defined differences; it does not assign an overall winner or ranking.",
-            "Local-only models use same-device validation, whereas centralized and FedAvg models use the global validation split, so direct performance comparison has different evaluation scopes.",
-            "The experiments use seed 42 only; variability across random seeds has not been measured.",
-            "The persisted scaler was fitted using centralized training data and reused by federated clients.",
+            "Local-only validation and test results use same-device evaluation, whereas centralized and FedAvg validation and test results use global evaluation.",
+            "The final holdout test evaluation was performed without model training or parameter updates.",
+            "The frozen global test set contains 1,059,388 rows.",
+            "The persisted scaler was fitted using centralized training data and reused during federated training and final test evaluation.",
             "Federated learning therefore does not represent a fully decentralized preprocessing pipeline in this experiment.",
             "No differential privacy or secure aggregation was implemented.",
             "Clients represent simulated logical IoT participants derived from N-BaIoT devices.",
             "Communication results are model tensor payload calculations, not measurements of actual network traffic.",
             "Communication calculations exclude protocol headers, serialization, compression, encryption, and transport overhead.",
             "Peak RSS is sampled process-tree memory usage, not energy consumption or a hardware-level instantaneous memory maximum.",
+            "The experiments use seed 42 only; variability across random seeds has not been measured.",
             "A single measured run is insufficient to establish statistical generalization across seeds or datasets.",
+            "Validation-to-test differences are descriptive measurements and should not be interpreted as statistical significance tests.",
         ],
     }
 
@@ -1246,6 +1738,14 @@ def main() -> None:
         f"{len(experiment_comparison)}"
     )
     print(
+        f"Final test rows: "
+        f"{len(final_test_metrics)}"
+    )
+    print(
+        f"Validation-to-test rows: "
+        f"{len(validation_to_test)}"
+    )
+    print(
         f"FedAvg round rows: "
         f"{len(fedavg_round_metrics)}"
     )
@@ -1264,6 +1764,38 @@ def main() -> None:
     print(
         f"Resource rows: "
         f"{len(resource_metrics)}"
+    )
+
+    print()
+    print("Final global test F1:")
+
+    for experiment_name in (
+        "centralized",
+        "device_non_iid_fedavg",
+        "iid_fedavg",
+    ):
+        value = final_test[
+            experiment_name
+        ]["f1"]
+
+        print(
+            f"  {experiment_name}: "
+            f"{float(value):.12f}"
+        )
+
+    local_test = final_test["local_only"]
+
+    print()
+    print(
+        "Final local-only test F1:"
+    )
+    print(
+        f"  macro_average: "
+        f"{float(local_test['macro_average']['f1']):.12f}"
+    )
+    print(
+        f"  sample_weighted_average: "
+        f"{float(local_test['sample_weighted_average']['f1']):.12f}"
     )
 
     print()

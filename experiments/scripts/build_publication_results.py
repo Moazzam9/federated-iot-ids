@@ -116,10 +116,13 @@ def write_json(data: dict[str, Any], path: Path) -> None:
 
 
 def save_figure(path: Path) -> None:
-    """Save the current matplotlib figure."""
+    """Save the current matplotlib figure to both publication and top-level figures directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    toplevel_path = PROJECT_ROOT / "figures" / path.name
+    toplevel_path.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
     plt.savefig(path, dpi=300, bbox_inches="tight")
+    plt.savefig(toplevel_path, dpi=300, bbox_inches="tight")
     plt.close()
 
 

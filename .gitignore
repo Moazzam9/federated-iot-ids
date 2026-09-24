@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 *.class
@@ -55,6 +55,12 @@ results/processed/*
 !data/processed/.gitkeep
 !results/raw/.gitkeep
 !results/processed/.gitkeep
+
+# Track publication results, tables, and figures
+!results/processed/publication/
+!results/processed/publication/**
+!figures/
+!figures/**
 
 # Reproducibility metadata for the frozen N-BaIoT split
 !data/processed/splits/

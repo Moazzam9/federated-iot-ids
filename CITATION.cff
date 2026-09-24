@@ -1,0 +1,48 @@
+cff-version: 1.2.0
+message: >
+  If you use this software or reproducibility package, please cite it using the
+  metadata below.
+type: software
+title: >
+  Federated Learning for Resource-Aware Intrusion Detection in IoT Networks:
+  An Empirical Study of IID and Device-Level Non-IID Data — Reproducibility Package
+abstract: >
+  This is the reproducibility package for a controlled empirical study comparing
+  four training conditions (Centralized, Controlled IID FedAvg, Device-Level
+  Non-IID FedAvg, and Local-Only) for binary botnet intrusion detection on the
+  N-BaIoT dataset. The package includes the complete experiment codebase, frozen
+  data split specifications, a persisted StandardScaler, publication figures and
+  tables, the full research manuscript, and a comprehensive reproducibility guide.
+  Experiments use a lightweight SmallMLP (9,537 parameters) evaluated across
+  9 IoT device types (7,062,606 total observations, 115 features) on CPU with a
+  single random seed (42) and a 3-round federated training horizon.
+  The study is a pre-print and has not yet been peer-reviewed.
+version: 1.0.0
+repository-code: https://github.com/Moazzam9/federated-iot-ids
+license-url: https://github.com/Moazzam9/federated-iot-ids
+keywords:
+  - federated learning
+  - IoT intrusion detection
+  - N-BaIoT
+  - FedAvg
+  - non-IID data
+  - device heterogeneity
+  - empirical evaluation
+  - botnet detection
+  - reproducibility
+preferred-citation:
+  type: unpublished
+  title: >
+    Federated Learning for Resource-Aware Intrusion Detection in IoT Networks:
+    An Empirical Study of IID and Device-Level Non-IID Data
+  abstract: >
+    Controlled empirical comparison of Centralized, FedAvg (IID), FedAvg (Non-IID),
+    and Local-Only training for IoT botnet intrusion detection on the N-BaIoT dataset.
+  keywords:
+    - federated learning
+    - IoT intrusion detection
+    - N-BaIoT
+    - FedAvg
+    - non-IID
+    - empirical evaluation
+  note: Manuscript under preparation; not yet peer-reviewed or published.

@@ -150,9 +150,9 @@ All experiments evaluate a lightweight feed-forward Multi-Layer Perceptron (`Sma
 * **Output Layer:** 1 linear unit followed by Sigmoid activation, producing an estimated probability $p \in [0, 1]$ of attack traffic.
 
 The network contains exactly **9,537 trainable parameters**, calculated as:
-$$\text{Layer 1 Weights \& Biases: } (115 \times 64) + 64 = 7,424$$
-$$\text{Layer 2 Weights \& Biases: } (64 \times 32) + 32 = 2,080$$
-$$\text{Output Layer Weights \& Biases: } (32 \times 1) + 1 = 33$$
+$$\text{Layer 1 Weights and Biases: } (115 \times 64) + 64 = 7,424$$
+$$\text{Layer 2 Weights and Biases: } (64 \times 32) + 32 = 2,080$$
+$$\text{Output Layer Weights and Biases: } (32 \times 1) + 1 = 33$$
 $$\text{Total Parameters: } 7,424 + 2,080 + 33 = 9,537$$
 
 Training minimizes Binary Cross-Entropy loss over batch predictions:

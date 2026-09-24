@@ -311,9 +311,9 @@ These observed differences illustrate the trade-offs inherent in different train
 ### 6.2 Effect of Client Data Distribution
 Comparing the Controlled IID FedAvg experiment against the Device Non-IID FedAvg experiment isolates the impact of client data distribution while holding total training samples (4,943,824 rows), model architecture (`SmallMLP`, 9,537 parameters), optimizer (Adam, $\alpha = 0.001$), batch size (256), and client count ($K = 9$) constant. 
 
-On the global holdout test set, Controlled IID FedAvg achieved an F1-Score of **0.999430**, whereas Device Non-IID FedAvg reached **0.975696**, producing an observed performance margin of **0.023734** (~2.37 percentage points). In the IID condition, training samples were redistributed such that each client received an approximately equal volume (~549,313 rows) with identical class proportions matching the global dataset. This uniform distribution reduced parameter drift across clients during local SGD iterations, allowing sample-weighted FedAvg aggregation to produce global parameter updates that aligned closely with centralized loss minimization.
+On the global holdout test set, Controlled IID FedAvg achieved an F1-Score of **0.999430**, whereas Device Non-IID FedAvg reached **0.975696**, producing an observed performance margin of **0.023734** (~2.37 percentage points). In the IID condition, training samples were redistributed such that each client received an approximately equal volume (~549,313 rows) with identical class proportions matching the global dataset. This uniform distribution produces a more similar class composition across clients, providing a less heterogeneous training condition than the natural device-level partition.
 
-In the natural device-level Non-IID condition, dataset sizes varied substantially across clients (ranging from 248,850 rows for `Ennio_Doorbell` to 769,074 rows for `Philips_B120N10_Baby_Monitor`), reflecting the natural traffic volume and feature characteristics of individual IoT device types. Local parameter updates were influenced by device-specific traffic distributions, introducing gradient diversity during local training epochs. While sample-weighted FedAvg aggregation successfully combined these local updates to reach a test F1-Score of **0.975696**, the non-IID data distribution introduced gradient variance across clients. This comparison demonstrates that data distribution heterogeneity is a key factor influencing global model generalization in federated intrusion detection.
+In the natural device-level Non-IID condition, dataset sizes varied substantially across clients (ranging from 248,850 rows for `Ennio_Doorbell` to 769,074 rows for `Philips_B120N10_Baby_Monitor`), reflecting the natural traffic volume and feature characteristics of individual IoT device types. Local parameter updates were influenced by device-specific traffic distributions, introducing gradient diversity during local training epochs. While sample-weighted FedAvg aggregation successfully combined these local updates to reach a test F1-Score of **0.975696**, the non-IID data distribution introduced gradient variance across clients. The lower F1 observed under the device-level partition is consistent with an effect of client-level data heterogeneity in this experimental setting.
 
 ### 6.3 Federated Convergence Under Device-Level Heterogeneity
 The validation trajectories recorded across the 3 communication rounds provide insights into the early-stage convergence dynamics of FedAvg under differing data distributions. 
@@ -369,8 +369,93 @@ To maintain scientific rigor, the conclusions drawn from this study must be inte
 
 ---
 
-## 7. Limitations
-*(Section to be completed in Stage 5)*
+## 7. Limitations and Threats to Validity
+
+### 7.1 Randomness and Training Horizon
+All primary empirical experiments reported in this study were executed using a single random seed (`seed = 42`) across a 3-round federated training horizon (or 3 centralized/local epochs). Fixing seed 42 ensured exact deterministic execution across experimental scripts. However, because the experiments were conducted with a single random seed, the reported metrics characterize one realized training trajectory rather than an estimate of variability across repeated runs. The sensitivity of model parameter initialization, mini-batch shuffling, and client partitioning to different random seeds remains unmeasured.
+
+Furthermore, executing 3 communication rounds ($E=1$ local epoch per round) characterizes performance evolution over three measured communication rounds rather than long-term asymptotic convergence behavior. While project configuration files (`configs/experiment.yaml`) specify upper bounds allowing up to 10 rounds or epochs, no 10-round training runs were executed. The 10-round figures reported in Section 5.4 are linear payload projections from the per-round accounting model. Extended training horizons under different random initializations should be evaluated in future research.
+
+### 7.2 Federated Preprocessing Assumptions
+In this experimental design, feature standardization via `StandardScaler` ($\mu, \sigma$) was fitted incrementally over the combined global training set (4,943,824 rows) prior to client partitioning (`training_standard_scaler.pkl`). This methodological choice ensured identical, stable feature scaling across centralized, local-only, and federated experiments, preventing scaling disparities from confounding baseline comparisons.
+
+However, obtaining global feature means ($\mu$) and standard deviations ($\sigma$) requires prior centralized access to pooled client training data. As a result, the preprocessing pipeline does not represent a fully decentralized edge system. In an actual edge deployment where raw data cannot be centrally pooled prior to training, feature standardization would require a federated preprocessing protocol (e.g., federated calculation of feature means and variances) or local per-client normalization.
+
+### 7.3 Simulated Clients and Deployment Realism
+The 9 logical clients evaluated in this study correspond directly to the 9 commercial IoT device traffic sources present in the N-BaIoT dataset. While this partitioning reflects authentic device-level data heterogeneity, the execution environment was a single-host CPU simulation. 
+
+Consequently, the experimental setup represents a controlled simulation of device-level data heterogeneity rather than a physical IoT deployment. The evaluation did not instantiate physical micro-controller hardware nodes, wireless network interfaces (e.g., Wi-Fi, Ethernet, Cellular), network middleboxes, edge gateway servers, real-time packet capture engines, or client battery constraints. Wireless channel interference, network jitter, physical packet drops, and real-world edge hardware execution were not present in the simulation environment.
+
+### 7.4 Evaluation-Scope Differences
+As documented in Section 4.7, a structural difference exists in evaluation scope between global models and local-only models:
+* **Global Models (Centralized, IID FedAvg, Device Non-IID FedAvg):** Evaluated against the entire frozen global test set (1,059,388 rows spanning all 9 IoT devices).
+* **Local-Only Models:** Evaluated strictly against the test subset belonging to each model's corresponding device (ranging from 53,325 to 164,801 rows per device). Macro-averages and sample-weighted averages summarize these 9 local evaluations.
+
+While this protocol evaluates each model type according to its intended operational scope—global models on global network traffic and local models on local device traffic—the resulting test metrics answer related but distinct evaluation questions. Direct numerical comparisons between local-only averages and global-model metrics should be interpreted with this scope difference in mind.
+
+### 7.5 Communication Measurement Boundaries
+The communication volume figures reported in Section 5.4 were derived using a model parameter state dictionary payload accounting model (`experiments/scripts/measure_communication.py`). The calculation computes the raw weight tensor size of the `SmallMLP` state dictionary (9,537 float32 parameters $\times$ 4 bytes = 38,148 bytes) and assumes full client participation ($C=1.0$) with 1 upload and 1 download per client per round (76,296 bytes per client/round; 2.06 MB cumulative across 3 rounds).
+
+These figures represent theoretical model tensor payload accounting based on parameter state dictionary size under an explicit protocol assumption. They do NOT represent measured network socket traffic. The accounting model does not include:
+* Transport protocol headers (TCP/IP, UDP, IPv6)
+* Application layer framing overheads (HTTP/2, gRPC, Protobuf)
+* Cryptographic wrappers (TLS/SSL handshakes, transport encryption)
+* Data serialization/deserialization overhead
+* Payload compression algorithms
+* Network latency, round-trip delays, packet retransmission, or network socket buffering.
+
+In a physical deployment, actual bandwidth usage would depend on transport framing, security protocols, payload compression, and network conditions.
+
+### 7.6 Computational and Hardware Scope
+Resource overhead was evaluated by monitoring host process-tree Resident Set Size (RSS memory) and execution wall-clock time using Python `psutil` at 0.1-second sampling intervals on a CPU host system. 
+
+Reported peak memory values (610.94 MiB to 668.36 MiB) reflect Python process-tree RAM allocated on a single x86_64 CPU workstation. They do not measure edge device hardware RAM limits (e.g., embedded micro-controllers with KB/MB memory limits), edge GPU memory, or physical memory constraints of low-power IoT gateways. Similarly, execution runtimes reflect host CPU process execution times and do not measure edge processor clock speeds, thermal throttling, hardware power draw, CPU energy consumption, or device battery drain.
+
+### 7.7 Dataset Characteristics and Duplicate Structure
+All empirical evaluations were performed on the N-BaIoT dataset (7,062,606 rows across 9 commercial IoT devices). A dataset-wide duplicate audit (`data/processed/splits/split_specification.txt`) revealed:
+* **Total Observations:** 7,062,606 rows
+* **Unique Feature Vectors:** 2,482,676 unique rows
+* **Duplicate Observations:** 4,579,930 duplicate rows across 1,891,636 duplicate groups
+* **Cross-Label Feature Conflicts:** 0 cross-label conflicts (no identical feature vector possesses conflicting benign and attack labels)
+* **Cross-Device Feature Groups:** 1,871,053 feature vector groups appear across multiple devices
+* **Maximum Duplicate Multiplicity:** 36 identical occurrences
+
+To prevent data leakage, the frozen split generator enforced strict `(device, feature_hash)` grouping within each device partition, ensuring that duplicate feature-vector groups within a device were kept indivisible and assigned exclusively to one split boundary (train, val, or test). However, repeated feature observations remain an intrinsic property of the N-BaIoT dataset. The presence of frequent identical feature vectors across time windows may assist models in learning frequent attack signatures, representing a dataset-specific characteristic.
+
+### 7.8 Model and Algorithm Scope
+The scope of model learning and optimization evaluated in this paper is subject to specific structural boundaries:
+* **Model Architecture:** All experiments evaluated a single compact feed-forward neural network (`SmallMLP`: 115 $\rightarrow$ 64 $\rightarrow$ 32 $\rightarrow$ 1, 9,537 parameters). Convolutional Neural Networks (CNNs), Recurrent Neural Networks (RNNs/LSTMs), Transformers, decision trees, or deep architectures were not evaluated.
+* **Optimization Setup:** All training used the Adam optimizer ($\alpha = 0.001$, batch size 256) with Binary Cross-Entropy loss. Alternative optimizers (e.g., SGD with momentum) or hyperparameter variations were not explored.
+* **Federated Algorithm:** Experiments evaluated standard Federated Averaging (FedAvg). Alternative federated optimization methods designed for non-IID data—such as FedProx, SCAFFOLD, FedNova, or personalized federated learning algorithms—were not evaluated.
+
+### 7.9 Privacy and Security Scope
+While federated learning avoids centralizing raw device network logs on a central server, the standard FedAvg implementation evaluated in this paper does NOT incorporate formal privacy-preserving primitives:
+* **Differential Privacy:** No local or global Differential Privacy ($\epsilon, \delta$) mechanisms (such as DP-SGD or gradient noise injection) were applied.
+* **Secure Aggregation:** No cryptographic Secure Aggregation (e.g., secret sharing or homomorphic encryption) was implemented.
+* **Attacking Robustness:** No empirical privacy attacks (e.g., gradient inversion, parameter reconstruction, or membership inference attacks) or security threat models (e.g., Byzantine client poisoning or backdoor attacks) were evaluated.
+
+Exchanged model parameter weights remain theoretically susceptible to parameter reconstruction or membership inference attacks. The study evaluates distributed model training performance, model exchange payload accounting, and host resource overhead, not formal privacy protection or adversarial robustness.
+
+### 7.10 IID and Participation Assumptions
+Two key structural assumptions were applied in the federated experimental setup:
+1. **Controlled IID Partition:** The Controlled IID experiment redistributes training samples across 9 clients using class-stratified random assignment as a controlled experimental benchmark to isolate data heterogeneity effects. It is an artificial control condition, not a model of real-world IoT deployment traffic distributions. Real IoT networks naturally feature non-IID device traffic distributions.
+2. **Full Client Participation:** All 9 clients participated in every communication round ($C = 1.0$). The evaluation did not model client dropout, intermittent wireless connectivity, partial client selection ($C < 1.0$), asynchronous client updates, or straggler client delays.
+
+### 7.11 Threats to Internal and External Validity
+
+#### Internal Validity
+Threats to internal validity concern factors that could influence the observed experimental measurements within the host simulation environment:
+* **Single Random Seed:** Measurements reflect a single realized seed (`seed = 42`) across 3 training rounds; seed-dependent variance remains unassessed.
+* **Preprocessing Pre-fitting:** Pre-fitting `StandardScaler` on global training data introduces central feature statistics into all client transformations.
+* **Data Loader Indexing Overhead:** As noted in Section 5.5, the higher execution wall time observed for Controlled IID FedAvg (16,290.68 s) relative to Device Non-IID FedAvg (4,034.84 s) reflects index-slicing overhead in the custom PyTorch data partitioner during local epoch iteration. This represents a software implementation characteristic rather than an intrinsic algorithmic complexity bound.
+
+#### External Validity
+Threats to external validity concern the generalizability of the findings to broader IoT security deployments:
+* **Dataset & Task Scope:** Findings are bounded by the N-BaIoT dataset (9 commercial IoT devices, binary benign vs. botnet attack classification). Results should not be assumed to generalize directly to other IoT datasets, multi-class attack classification, or different network protocols.
+* **Environment Scope:** Host CPU execution on a single workstation does not replicate physical edge hardware constraints, wireless channel dynamics, or edge server topologies.
+* **Algorithmic Scope:** Performance dynamics under FedAvg with `SmallMLP` may not predict the behavior of alternative federated aggregation algorithms or larger deep learning models.
+
+---
 
 ## 8. Conclusion
 *(Section to be completed in Stage 5)*

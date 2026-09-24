@@ -181,3 +181,10 @@ If you use this codebase or reproducibility package, please cite using the metad
 The N-BaIoT dataset should be cited as:
 
 > Y. Meidan, M. Bohadana, Y. Mathov, Y. Mirsky, A. Shabtai, D. Breitenbacher, and Y. Elovici, "N-BaIoT — Network-based Detection of IoT Botnet Attacks Using Deep Autoencoders," *IEEE Pervasive Computing*, vol. 17, no. 3, pp. 12–22, Jul.–Sep. 2018.
+
+---
+
+## Author
+
+- **Moazzam Azam** — [moazzamkk13@gmail.com](mailto:moazzamkk13@gmail.com)
+

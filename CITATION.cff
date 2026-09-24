@@ -6,6 +6,10 @@ type: software
 title: >
   Federated Learning for Resource-Aware Intrusion Detection in IoT Networks:
   An Empirical Study of IID and Device-Level Non-IID Data — Reproducibility Package
+authors:
+  - family-names: Azam
+    given-names: Moazzam
+    email: moazzamkk13@gmail.com
 abstract: >
   This is the reproducibility package for a controlled empirical study comparing
   four training conditions (Centralized, Controlled IID FedAvg, Device-Level
@@ -35,6 +39,10 @@ preferred-citation:
   title: >
     Federated Learning for Resource-Aware Intrusion Detection in IoT Networks:
     An Empirical Study of IID and Device-Level Non-IID Data
+  authors:
+    - family-names: Azam
+      given-names: Moazzam
+      email: moazzamkk13@gmail.com
   abstract: >
     Controlled empirical comparison of Centralized, FedAvg (IID), FedAvg (Non-IID),
     and Local-Only training for IoT botnet intrusion detection on the N-BaIoT dataset.

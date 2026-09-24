@@ -1,5 +1,7 @@
 # Federated Learning for Resource-Aware Intrusion Detection in IoT Networks: An Empirical Study of IID and Device-Level Non-IID Data
 
+**Author:** Moazzam Azam (<moazzamkk13@gmail.com>)
+
 ## Abstract
 
 The proliferation of Internet of Things (IoT) devices has expanded the network attack surface, increasing the risk of botnet-driven intrusions such as Mirai and Gafgyt campaigns. Centralizing raw network traffic from IoT devices for intrusion detection raises data locality concerns and imposes bandwidth costs. Federated learning (FL) offers a decentralized training paradigm in which devices contribute model parameter updates rather than raw data; however, the practical utility of FL for IoT intrusion detection under real-world device-level data heterogeneity has not been empirically characterized with transparent methodology and explicit scope documentation.

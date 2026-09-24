@@ -1651,7 +1651,7 @@ def main() -> None:
     # ------------------------------------------------------------------
 
     analysis = {
-        "project": "Publication 02",
+        "project": "the study",
         "experiment_group": (
             "N-BaIoT federated intrusion detection"
         ),

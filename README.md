@@ -4,7 +4,7 @@
 [![PyTorch 2.14](https://img.shields.io/badge/PyTorch-2.14-orange.svg)](https://pytorch.org/)
 [![Tests](https://img.shields.io/badge/tests-100%20passed-green.svg)]()
 
-Official research repository and reproducibility package for **Publication 02**:  
+Official research repository and reproducibility package for **the study**:  
 *"Federated Learning for Resource-Aware Intrusion Detection in IoT Networks: An Empirical Study of IID and Device-Level Non-IID Data"*.
 
 ---
@@ -73,4 +73,4 @@ Expected result: `100 passed`.
 
 ## License & Citation
 
-This repository is part of the Publication 02 research project. Please see the [Manuscript](manuscript/manuscript.md) for full citation metadata and bibliographic references.
+This repository is part of the research project. Please see the [Manuscript](manuscript/manuscript.md) for full citation metadata and bibliographic references.

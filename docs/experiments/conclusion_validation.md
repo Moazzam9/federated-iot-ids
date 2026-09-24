@@ -1,6 +1,6 @@
 # Conclusion and Future Work — Validation Documentation
 
-This document records the systematic verification of Section 8 ("Conclusion and Future Work") of the manuscript against 15 explicit validation requirements for Publication 02.
+This document records the systematic verification of Section 8 ("Conclusion and Future Work") of the manuscript against 15 explicit validation requirements for the study.
 
 ---
 
@@ -28,4 +28,4 @@ This document records the systematic verification of Section 8 ("Conclusion and 
 
 ## Conclusion
 
-All 15 validation checks for Section 8 ("Conclusion and Future Work") have been evaluated and passed. Section 8 synthesizes the empirical findings of Publication 02 with scientific accuracy, adheres strictly to verified metrics, and provides an actionable future work roadmap matching documented study boundaries.
+All 15 validation checks for Section 8 ("Conclusion and Future Work") have been evaluated and passed. Section 8 synthesizes the empirical findings of the study with scientific accuracy, adheres strictly to verified metrics, and provides an actionable future work roadmap matching documented study boundaries.

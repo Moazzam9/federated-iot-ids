@@ -46,7 +46,7 @@ def require(condition: bool, message: str) -> None:
 
 def main() -> None:
     print("=" * 70)
-    print("PUBLICATION 02 EXPERIMENT CONFIGURATION VALIDATION")
+    print("EXPERIMENT CONFIGURATION VALIDATION")
     print("=" * 70)
     print()
 

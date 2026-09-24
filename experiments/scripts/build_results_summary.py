@@ -944,7 +944,7 @@ def main() -> None:
 
     # Build final processed summary.
     summary = {
-        "project": "Publication 02",
+        "project": "the study",
         "experiment_group": "N-BaIoT federated intrusion detection",
         "dataset": "N-BaIoT",
         "model": "small_mlp",

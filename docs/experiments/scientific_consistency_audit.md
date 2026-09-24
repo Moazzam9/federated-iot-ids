@@ -1,6 +1,6 @@
 # Scientific Consistency Audit — Stage 9
 
-This document records the comprehensive scientific consistency audit of Publication 02 (`manuscript/manuscript.md`) against the authoritative implementation codebase, execution artifacts, and methodology documentation.
+This document records the comprehensive scientific consistency audit of the study (`manuscript/manuscript.md`) against the authoritative implementation codebase, execution artifacts, and methodology documentation.
 
 ---
 
@@ -396,7 +396,7 @@ In Stage 10 (Manuscript Corrections), the following two minor refinements should
 
 ## 32. Overall Audit Conclusion
 
-The scientific consistency audit of Publication 02 is **COMPLETE**.
+The scientific consistency audit of the study is **COMPLETE**.
 
 **Summary Verdict:**
 Every empirical value, metric table, convergence trajectory, communication volume, host resource measurement, and scope limitation reported in `manuscript/manuscript.md` is **fully consistent with the underlying implementation codebase and raw execution JSON logs**. Zero numerical errors, zero false privacy overclaims, zero fake hardware/energy measurements, and zero unsupported asymptotic convergence assertions were detected. Two minor text refinements (one MEDIUM, one LOW) are documented for Stage 10 execution.

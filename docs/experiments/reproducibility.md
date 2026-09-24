@@ -1,4 +1,4 @@
-# Reproducibility Guide — Publication 02
+# Reproducibility Guide — the study
 
 This document provides complete reproducibility documentation for the research study:
 

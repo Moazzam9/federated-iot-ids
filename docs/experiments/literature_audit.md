@@ -1,6 +1,6 @@
-# Literature and References Audit — Publication 02
+# Literature and References Audit — the study
 
-This document provides a comprehensive literature audit and bibliographic verification for Publication 02.
+This document provides a comprehensive literature audit and bibliographic verification for the study.
 
 ---
 

@@ -1,7 +1,7 @@
 # Experimental Setup Documentation
 
 ## Overview
-This document provides a comprehensive technical overview of the experimental setup, data partitioning, model architecture, training configuration, evaluation protocol, communication accounting, and resource monitoring for Publication 02 (`federated-iot-ids`).
+This document provides a comprehensive technical overview of the experimental setup, data partitioning, model architecture, training configuration, evaluation protocol, communication accounting, and resource monitoring for the study (`federated-iot-ids`).
 
 ---
 

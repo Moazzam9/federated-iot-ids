@@ -1,6 +1,6 @@
 # Limitations and Threats to Validity — Validation Documentation
 
-This document records the systematic verification of Section 7 ("Limitations and Threats to Validity") of the manuscript against 22 explicit validation requirements for Publication 02.
+This document records the systematic verification of Section 7 ("Limitations and Threats to Validity") of the manuscript against 22 explicit validation requirements for the study.
 
 ---
 

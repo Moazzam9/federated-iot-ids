@@ -15,11 +15,11 @@
 ## 4. Experimental Setup
 
 ### 4.1 Dataset and Data Partitioning
-This study evaluates intrusion detection models using the N-BaIoT (Network-Based Detection of IoT Botnet Attacks) dataset. The dataset comprises network traffic statistics collected from 9 distinct commercial IoT device types: Danmini Doorbell, Ecobee Thermostat, Ennio Doorbell, Philips B120N10 Baby Monitor, Provision PT-737E Security Camera, Provision PT-838 Security Camera, Samsung SNH-1011 N Webcam, SimpleHome XCS7-1002 WHT Security Camera, and SimpleHome XCS7-1003 WHT Security Camera. 
+This study evaluates intrusion detection models using the N-BaIoT (Network-Based Detection of IoT Botnet Attacks) dataset [2]. The dataset comprises network traffic statistics collected from 9 distinct commercial IoT device types: Danmini Doorbell, Ecobee Thermostat, Ennio Doorbell, Philips B120N10 Baby Monitor, Provision PT-737E Security Camera, Provision PT-838 Security Camera, Samsung SNH-1011 N Webcam, SimpleHome XCS7-1002 WHT Security Camera, and SimpleHome XCS7-1003 WHT Security Camera. 
 
 The primary task is binary intrusion detection, distinguishing benign network traffic (Class `0`) from malicious attack traffic (Class `1`), which encompasses Mirai and Gafgyt botnet attack vectors. Each network observation is represented by 115 continuous numerical features capturing packet arrival statistics, sizes, and jitter across five temporal decay windows (100 ms, 500 ms, 1.5 s, 10 s, 1 min) and four aggregation streams (Source-IP, Source-MAC-IP, Channel/Socket, Socket-Pair).
 
-The complete dataset contains 7,062,606 observations. To ensure rigorous evaluation without data leakage, a frozen split specification was generated using a fixed random seed of 42. Partitioning was performed at the `(device, feature_hash)` level within each IoT device source, ensuring that identical feature-vector groups within a device were kept indivisible and assigned exclusively to one split boundary. The resulting split allocation comprises:
+The complete dataset contains 7,062,606 observations. To ensure rigorous evaluation without data leakage [8], a frozen split specification was generated using a fixed random seed of 42. Partitioning was performed at the `(device, feature_hash)` level within each IoT device source, ensuring that identical feature-vector groups within a device were kept indivisible and assigned exclusively to one split boundary. The resulting split allocation comprises:
 * **Training Set:** 4,943,824 rows (70.00%)
 * **Validation Set:** 1,059,394 rows (15.00%)
 * **Test Set:** 1,059,388 rows (15.00%)
@@ -66,7 +66,7 @@ While project configuration files (`configs/experiment.yaml`) specify upper boun
 * **Client Participation:** Full client participation in every round ($C = 1.0$, 9 out of 9 clients participating).
 
 ### 4.5 Federated Learning Procedure
-Federated experiments execute the standard Federated Averaging (FedAvg) algorithm (`src/fl/coordinator.py`). For each communication round $r \in \{1, 2, 3\}$:
+Federated experiments execute the standard Federated Averaging (FedAvg) algorithm [1] (`src/fl/coordinator.py`). For each communication round $r \in \{1, 2, 3\}$:
 1. **Global Model Broadcast:** The central coordinator serializes the global model parameter state dictionary $W^{r-1}$ and distributes a copy to all 9 participating clients.
 2. **Local Training:** Each client $k \in \{1, \dots, 9\}$ instantiates a local model initialized with $W^{r-1}$ and trains locally for $E = 1$ epoch over its assigned training subset $D_k$ ($n_k = |D_k|$) using Adam ($\alpha = 0.001$, batch size 256).
 3. **State Upload:** Upon local training completion, each client returns its updated parameter state dictionary $W_k^r$ and sample count $n_k$ to the coordinator.
@@ -80,7 +80,7 @@ Transmission involves full model parameter state dictionaries (`state_dict`), no
 Four experimental conditions were evaluated to isolate data distribution and collaboration effects:
 1. **Centralized Baseline:** Model trained on pooled global training data. Represents the empirical upper bound for model learning capacity without data distribution boundaries.
 2. **Local-Only Baseline:** 9 isolated models trained independently on single-device data. Represents performance when clients do not participate in collaborative training.
-3. **Device-Level Non-IID FedAvg:** FedAvg executed across the 9 natural device partitions. Measures collaborative learning performance under real-world device distribution heterogeneity.
+3. **Device-Level Non-IID FedAvg:** FedAvg executed across the 9 natural device partitions. Measures collaborative learning performance under real-world device distribution heterogeneity [5]–[7].
 4. **Controlled IID FedAvg:** FedAvg executed across 9 class-stratified IID partitions. Isolates FedAvg algorithmic convergence from device non-IID skew.
 
 ### 4.7 Evaluation Protocol
@@ -302,7 +302,7 @@ Across all three global model conditions, validation set performance and holdout
 ## 6. Discussion
 
 ### 6.1 Centralized and Federated Performance
-The empirical results demonstrate distinct performance profiles across the centralized baseline, federated learning variants, and local-only models. On the global holdout test set (1,059,388 samples), the Centralized baseline achieved an F1-Score of **0.997097** (ROC-AUC: **0.996899**), establishing an empirical reference point for model capacity when all 4.94M training observations are pooled globally. 
+The empirical results demonstrate distinct performance profiles across the centralized baseline, federated learning variants, and local-only models in IoT network intrusion detection [3], [4]. On the global holdout test set (1,059,388 samples), the Centralized baseline achieved an F1-Score of **0.997097** (ROC-AUC: **0.996899**), establishing an empirical reference point for model capacity when all 4.94M training observations are pooled globally. 
 
 Under the controlled class-stratified IID partition, FedAvg reached a global test F1-Score of **0.999430** (ROC-AUC: **0.999859**) after 3 rounds. When FedAvg was executed across the natural device-level Non-IID partitions, the global model reached a test F1-Score of **0.975696** (ROC-AUC: **0.992387**). Meanwhile, the Local-Only baseline models, evaluated on their respective device-specific test subsets, yielded an unweighted macro-average F1-Score of **0.971422** and a sample-weighted average F1-Score of **0.969684**.
 
@@ -313,7 +313,7 @@ Comparing the Controlled IID FedAvg experiment against the Device Non-IID FedAvg
 
 On the global holdout test set, Controlled IID FedAvg achieved an F1-Score of **0.999430**, whereas Device Non-IID FedAvg reached **0.975696**, producing an observed performance margin of **0.023734** (~2.37 percentage points). In the IID condition, training samples were redistributed such that each client received an approximately equal volume (~549,313 rows) with identical class proportions matching the global dataset. This uniform distribution produces a more similar class composition across clients, providing a less heterogeneous training condition than the natural device-level partition.
 
-In the natural device-level Non-IID condition, dataset sizes varied substantially across clients (ranging from 248,850 rows for `Ennio_Doorbell` to 769,074 rows for `Philips_B120N10_Baby_Monitor`), reflecting the natural traffic volume and feature characteristics of individual IoT device types. Local parameter updates were influenced by device-specific traffic distributions. While sample-weighted FedAvg aggregation combined these local updates to reach a test F1-Score of **0.975696**, the natural device-level partition presented a more heterogeneous training condition than the controlled IID partition. The lower F1 observed under the device-level partition is consistent with an effect of client-level data heterogeneity in this experimental setting.
+In the natural device-level Non-IID condition, dataset sizes varied substantially across clients (ranging from 248,850 rows for `Ennio_Doorbell` to 769,074 rows for `Philips_B120N10_Baby_Monitor`), reflecting the natural traffic volume and feature characteristics of individual IoT device types. Local parameter updates were influenced by device-specific traffic distributions. While sample-weighted FedAvg aggregation combined these local updates to reach a test F1-Score of **0.975696**, the natural device-level partition presented a more heterogeneous training condition than the controlled IID partition. The lower F1 observed under the device-level partition is consistent with an effect of client-level data heterogeneity [5], [6] in this experimental setting.
 
 ### 6.3 Federated Convergence Under Device-Level Heterogeneity
 The validation trajectories recorded across the 3 communication rounds provide insights into the early-stage convergence dynamics of FedAvg under differing data distributions. 
@@ -342,7 +342,7 @@ These observations illustrate that while local-only training avoids communicatio
 ### 6.5 Communication and Computational Trade-offs
 Evaluating system efficiency requires examining both parameter exchange payload and host computational runtime:
 
-1. **Communication Payload Accounting:** The `SmallMLP` network architecture contains 9,537 float32 parameters, resulting in a compact model state dictionary size of **38,148 bytes** (~37.25 KiB). Under full client participation ($K = 9$), each communication round involves downloading and uploading 1 state dict per client, transferring **686,664 bytes** (~0.655 MiB) per round across all clients. Over the 3-round experiment, cumulative model parameter transfer totaled **2,059,992 bytes** (~1.96 MiB). The small parameter payload of the selected MLP results in a relatively small theoretical model-exchange volume under the assumed full-participation FedAvg protocol.
+1. **Communication Payload Accounting:** The `SmallMLP` network architecture contains 9,537 float32 parameters, resulting in a compact model state dictionary size of **38,148 bytes** (~37.25 KiB). Under full client participation ($K = 9$), each communication round involves downloading and uploading 1 state dict per client, transferring **686,664 bytes** (~0.655 MiB) per round across all clients. Over the 3-round experiment, cumulative model parameter transfer totaled **2,059,992 bytes** (~1.96 MiB). The small parameter payload of the selected MLP results in a relatively small theoretical model-exchange volume under the assumed full-participation FedAvg protocol [1], [6].
 2. **Computational Runtime and CPU Memory:** Host process execution metrics recorded peak process-tree RSS memory ranging between **610.94 MiB** (Centralized) and **668.36 MiB** (Controlled IID FedAvg). Total CPU wall-clock execution times were **5,018.94 s** (~83.65 min) for Centralized (3 epochs), **3,402.99 s** (~56.72 min) for Local-Only (3 epochs/client), **4,034.84 s** (~67.25 min) for Device Non-IID FedAvg (3 rounds), and **16,290.68 s** (~271.51 min) for Controlled IID FedAvg (3 rounds).
 
 *Runtime Observation:* Controlled IID FedAvg exhibited a wall-clock execution time (~4.53 hours) over four times longer than Device Non-IID FedAvg (~1.12 hours), despite both processing the identical total volume of 4,943,824 training rows. The implementation documentation identifies index-based partition access in the custom IID data loader as a likely contributor to the IID runtime overhead; however, the present experiments did not perform a dedicated profiling study that isolates the contribution of this mechanism.
@@ -420,19 +420,19 @@ All empirical evaluations were performed on the N-BaIoT dataset (7,062,606 rows 
 * **Cross-Device Feature Groups:** 1,871,053 feature vector groups appear across multiple devices
 * **Maximum Duplicate Multiplicity:** 36 identical occurrences
 
-To prevent data leakage, the frozen split generator enforced strict `(device, feature_hash)` grouping within each device partition, ensuring that duplicate feature-vector groups within a device were kept indivisible and assigned exclusively to one split boundary (train, val, or test). However, repeated feature observations remain an intrinsic property of the N-BaIoT dataset. The presence of frequent identical feature vectors across time windows may assist models in learning frequent attack signatures, representing a dataset-specific characteristic.
+To prevent data leakage [8], the frozen split generator enforced strict `(device, feature_hash)` grouping within each device partition, ensuring that duplicate feature-vector groups within a device were kept indivisible and assigned exclusively to one split boundary (train, val, or test). However, repeated feature observations remain an intrinsic property of the N-BaIoT dataset. The presence of frequent identical feature vectors across time windows may assist models in learning frequent attack signatures, representing a dataset-specific characteristic.
 
 ### 7.8 Model and Algorithm Scope
 The scope of model learning and optimization evaluated in this paper is subject to specific structural boundaries:
 * **Model Architecture:** All experiments evaluated a single compact feed-forward neural network (`SmallMLP`: 115 $\rightarrow$ 64 $\rightarrow$ 32 $\rightarrow$ 1, 9,537 parameters). Convolutional Neural Networks (CNNs), Recurrent Neural Networks (RNNs/LSTMs), Transformers, decision trees, or deep architectures were not evaluated.
 * **Optimization Setup:** All training used the Adam optimizer ($\alpha = 0.001$, batch size 256) with Binary Cross-Entropy loss. Alternative optimizers (e.g., SGD with momentum) or hyperparameter variations were not explored.
-* **Federated Algorithm:** Experiments evaluated standard Federated Averaging (FedAvg). Alternative federated optimization methods designed for non-IID data—such as FedProx, SCAFFOLD, FedNova, or personalized federated learning algorithms—were not evaluated.
+* **Federated Algorithm:** Experiments evaluated standard Federated Averaging (FedAvg) [1]. Alternative federated optimization methods designed for non-IID data—such as FedProx [9], SCAFFOLD [10], FedNova, or personalized federated learning algorithms—were not evaluated.
 
 ### 7.9 Privacy and Security Scope
 While federated learning avoids centralizing raw device network logs on a central server, the standard FedAvg implementation evaluated in this paper does NOT incorporate formal privacy-preserving primitives:
-* **Differential Privacy:** No local or global Differential Privacy ($\epsilon, \delta$) mechanisms (such as DP-SGD or gradient noise injection) were applied.
-* **Secure Aggregation:** No cryptographic Secure Aggregation (e.g., secret sharing or homomorphic encryption) was implemented.
-* **Attacking Robustness:** No empirical privacy attacks (e.g., gradient inversion, parameter reconstruction, or membership inference attacks) or security threat models (e.g., Byzantine client poisoning or backdoor attacks) were evaluated.
+* **Differential Privacy:** No local or global Differential Privacy ($\epsilon, \delta$) mechanisms [11], [12] (such as DP-SGD or gradient noise injection) were applied.
+* **Secure Aggregation:** No cryptographic Secure Aggregation [13] (e.g., secret sharing or homomorphic encryption) was implemented.
+* **Attacking Robustness:** No empirical privacy attacks (e.g., gradient inversion, parameter reconstruction, or membership inference attacks) or security threat models (e.g., Byzantine client poisoning [14], [15] or backdoor attacks) were evaluated.
 
 Exchanged model parameter weights remain theoretically susceptible to parameter reconstruction or membership inference attacks. The study evaluates distributed model training performance, model exchange payload accounting, and host resource overhead, not formal privacy protection or adversarial robustness.
 
@@ -483,11 +483,46 @@ To address the methodological and scope boundaries documented in Section 7, futu
 3. **Decentralized and Federated Preprocessing:** Investigate federated preprocessing protocols (such as federated calculation of feature means and variances) or local client feature normalization strategies to eliminate reliance on centrally pre-fitted global `StandardScaler` parameters.
 4. **Heterogeneous and Dynamic Client Environments:** Benchmark federated performance under partial client participation ($C < 1.0$), client dropout, straggler delays, severe class/volume imbalance, and non-stationary temporal traffic drift.
 5. **Broader Intrusion Datasets and Multi-Class Evaluation:** Extend empirical evaluations to additional IoT intrusion detection benchmarks (such as TON_IoT, Bot-IoT, or CICIoT2023) and multi-class attack classification taxonomies.
-6. **Alternative Federated Algorithms:** Compare standard FedAvg against federated aggregation algorithms specifically designed for non-IID distributions (such as FedProx, SCAFFOLD, or FedNova) as well as personalized federated learning frameworks.
+6. **Alternative Federated Algorithms:** Compare standard FedAvg [1] against federated aggregation algorithms specifically designed for non-IID distributions (such as FedProx [9], SCAFFOLD [10], or FedNova) as well as personalized federated learning frameworks.
 7. **Alternative Model Architecture Scope:** Evaluate additional model architectures, including decision trees, linear models, CNNs, LSTMs, and deep neural network variants tailored for resource-constrained edge computing.
 8. **Physical Network Socket and Protocol Benchmarking:** Measure actual network socket traffic, transport framing overheads (TCP/IP, HTTP/2, gRPC), serialization latency, packet loss, bandwidth constraints, compression, and TLS encryption costs in a networked environment.
-9. **Formal Privacy and Security Primitives:** Incorporate and empirically evaluate Differential Privacy ($\epsilon, \delta$), Secure Aggregation protocols, and resilience against adversarial security threat models, including membership inference, parameter reconstruction, and client poisoning attacks.
+9. **Formal Privacy and Security Primitives:** Incorporate and empirically evaluate Differential Privacy ($\epsilon, \delta$) [11], [12], Secure Aggregation protocols [13], and resilience against adversarial security threat models, including membership inference, parameter reconstruction, and client poisoning attacks [14], [15].
 10. **Physical Edge Hardware Deployment:** Benchmark model training and inference on physical IoT edge hardware nodes (such as micro-controllers, Raspberry Pi devices, or edge gateways) to measure physical RAM limits, CPU thermal throttling, and physical battery/power consumption.
 11. **Hierarchical and Asynchronous Topologies:** Study gateway-assisted hierarchical aggregation, asynchronous client parameter updates, and network fault tolerance in distributed IoT deployments.
 12. **Cross-Dataset Generalization:** Evaluate cross-dataset transferability and model generalization across heterogeneous physical deployment environments and unseen IoT traffic distributions.
+
+---
+
+## References
+
+[1] H. B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. Agüera y Arcas, "Communication-efficient learning of deep networks from decentralized data," in *Proceedings of the 20th International Conference on Artificial Intelligence and Statistics (AISTATS)*, PMLR 54:1273–1282, 2017.
+
+[2] Y. Meidan, M. Bohadana, Y. Mathov, Y. Mirsky, A. Shabtai, D. Breitenbacher, and Y. Elovici, "N-BaIoT—Network-based detection of IoT botnet attacks using deep autoencoders," *IEEE Pervasive Computing*, vol. 17, no. 3, pp. 12–22, Jul.–Sept. 2018. DOI: 10.1109/MPRV.2018.03367731.
+
+[3] B. B. Zarpelão, R. S. Miani, C. T. Kawakani, and S. S. de Alvarenga, "A survey of intrusion detection in Internet of Things," *Journal of Network and Computer Applications*, vol. 84, pp. 25–37, Apr. 2017. DOI: 10.1016/j.jnca.2017.02.009.
+
+[4] N. Chaabouni, M. Mosbah, A. Zemmari, C. Connable, and A. Elouardi, "Network intrusion detection systems for IoT environments: A review," *IEEE Access*, vol. 7, pp. 142964–142980, Sept. 2019. DOI: 10.1109/ACCESS.2019.2943141.
+
+[5] Y. Zhao, M. Li, L. Lai, N. Suda, D. Civin, and V. Chandra, "Federated learning with non-IID data," *arXiv preprint arXiv:1806.00582*, 2018. DOI: 10.48550/arXiv.1806.00582.
+
+[6] T. Li, A. K. Sahu, A. Talwalkar, and V. Smith, "Federated learning: Challenges, methods, and future directions," *IEEE Signal Processing Magazine*, vol. 37, no. 3, pp. 50–60, May 2020. DOI: 10.1109/MSP.2020.2975749.
+
+[7] P. Kairouz et al., "Advances and open problems in federated learning," *Foundations and Trends® in Machine Learning*, vol. 14, no. 1–2, pp. 1–210, 2021. DOI: 10.1561/2200000083.
+
+[8] D. Arp, E. Quiring, F. Pendlebury, A. Warnecke, F. Pierazzi, C. Wressnegger, L. Cavallaro, and K. Rieck, "Dos and don'ts of machine learning in computer security," in *Proceedings of the 31st USENIX Security Symposium*, pp. 3971–3988, Aug. 2022.
+
+[9] T. Li, A. K. Sahu, M. Zaheer, M. Sanjabi, A. Talwalkar, and V. Smith, "Federated optimization in heterogeneous networks," in *Proceedings of Machine Learning and Systems (MLSys)*, vol. 2, pp. 429–450, 2020.
+
+[10] S. P. Karimireddy, S. Kale, M. Mohri, S. J. Reddi, S. U. Stich, and A. T. Suresh, "SCAFFOLD: Stochastic controlled averaging for federated learning," in *Proceedings of the 37th International Conference on Machine Learning (ICML)*, PMLR 119:5132–5143, 2020.
+
+[11] C. Dwork, "Differential privacy," in *Proceedings of the 33rd International Colloquium on Automata, Languages and Programming (ICALP)*, Springer LNCS 4052, pp. 1–12, 2006. DOI: 10.1007/11787006_1.
+
+[12] M. Abadi, A. Chu, I. Goodfellow, H. B. McMahan, I. Mironov, K. Talwar, and L. Zhang, "Deep learning with differential privacy," in *Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communications Security (CCS)*, pp. 308–318, Oct. 2016. DOI: 10.1145/2976749.2978318.
+
+[13] K. Bonawitz, V. Ivanov, B. Kreuter, A. Marcedone, H. B. McMahan, S. Patel, D. Ramage, A. Segal, and K. Seth, "Practical secure aggregation for privacy-preserving machine learning," in *Proceedings of the 2017 ACM SIGSAC Conference on Computer and Communications Security (CCS)*, pp. 1175–1191, Oct. 2017. DOI: 10.1145/3133956.3133982.
+
+[14] P. Blanchard, E. M. El Mhamdi, R. Guerraoui, and J. Stainer, "Machine learning with adversaries: Byzantine tolerant gradient descent," in *Advances in Neural Information Processing Systems 30 (NIPS)*, pp. 119–129, 2017.
+
+[15] A. N. Bhagoji, S. Chakraborty, P. Mittal, and S. Calo, "Analyzing federated learning through an adversarial lens," in *Proceedings of the 36th International Conference on Machine Learning (ICML)*, PMLR 97:634–643, 2019.
+
 

@@ -235,7 +235,7 @@ Resource overhead was measured during experiment execution using process-tree Re
 
 ### 4.7 Reproducibility Statement
 
-To ensure full reproducibility, the repository includes fixed random seed definitions (seed 42), frozen split index specifications (`data/processed/splits/split_specification.txt`), persisted StandardScaler binaries (`training_standard_scaler.pkl`), complete experiment configurations (`configs/experiment.yaml`), and raw experiment output logs (`results/raw/`). The complete codebase and results packaging scripts are maintained at `https://github.com/Moazzam9/federated-iot-ids`.
+To ensure full reproducibility, the repository includes fixed random seed definitions (seed 42), frozen split index specifications (`data/processed/splits/split_specification.txt`), persisted StandardScaler binaries (`training_standard_scaler.pkl`), complete experiment configurations (`configs/experiment.yaml`), and raw experiment output logs (`results/raw/`). The complete codebase and results packaging scripts are maintained at `https://github.com/Moazzam9/federated-iot-ids`. The code and reproducibility artefacts for this study are permanently archived at Zenodo: https://doi.org/10.5281/zenodo.22941258.
 
 ---
 

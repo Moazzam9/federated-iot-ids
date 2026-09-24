@@ -10,6 +10,7 @@ authors:
   - family-names: Azam
     given-names: Moazzam
     email: moazzamkk13@gmail.com
+    orcid: "https://orcid.org/0009-0001-6145-0473"
 abstract: >
   This is the reproducibility package for a controlled empirical study comparing
   four training conditions (Centralized, Controlled IID FedAvg, Device-Level
@@ -23,6 +24,7 @@ abstract: >
   The study is a pre-print and has not yet been peer-reviewed.
 version: 1.0.0
 license: MIT
+doi: "10.5281/zenodo.22941258"
 repository-code: https://github.com/Moazzam9/federated-iot-ids
 keywords:
   - federated learning
@@ -43,6 +45,7 @@ preferred-citation:
     - family-names: Azam
       given-names: Moazzam
       email: moazzamkk13@gmail.com
+      orcid: "https://orcid.org/0009-0001-6145-0473"
   abstract: >
     Controlled empirical comparison of Centralized, FedAvg (IID), FedAvg (Non-IID),
     and Local-Only training for IoT botnet intrusion detection on the N-BaIoT dataset.

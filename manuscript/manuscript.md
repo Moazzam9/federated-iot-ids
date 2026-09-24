@@ -300,10 +300,77 @@ Across all three global model conditions, validation set performance and holdout
 ---
 
 ## 6. Discussion
-*(Section to be completed in Stage 4)*
+
+### 6.1 Centralized and Federated Performance
+The empirical results demonstrate distinct performance profiles across the centralized baseline, federated learning variants, and local-only models. On the global holdout test set (1,059,388 samples), the Centralized baseline achieved an F1-Score of **0.997097** (ROC-AUC: **0.996899**), establishing an empirical reference point for model capacity when all 4.94M training observations are pooled globally. 
+
+Under the controlled class-stratified IID partition, FedAvg reached a global test F1-Score of **0.999430** (ROC-AUC: **0.999859**) after 3 rounds. When FedAvg was executed across the natural device-level Non-IID partitions, the global model reached a test F1-Score of **0.975696** (ROC-AUC: **0.992387**). Meanwhile, the Local-Only baseline models, evaluated on their respective device-specific test subsets, yielded an unweighted macro-average F1-Score of **0.971422** and a sample-weighted average F1-Score of **0.969684**.
+
+These observed differences illustrate the trade-offs inherent in different training topologies. Controlled IID partitioning yielded global test metrics closely matching the centralized benchmark under the 3-round execution window. In contrast, natural device-level Non-IID partitioning exhibited a lower global test F1-Score than the IID condition and centralized baseline. The observed performance difference is consistent with the effect of client-level data heterogeneity in this controlled experimental setting. However, these findings reflect the specific model, dataset, preprocessing, and training configuration evaluated, and should not be interpreted as a general proof that federated learning inherently matches or lags centralized learning across arbitrary network environments.
+
+### 6.2 Effect of Client Data Distribution
+Comparing the Controlled IID FedAvg experiment against the Device Non-IID FedAvg experiment isolates the impact of client data distribution while holding total training samples (4,943,824 rows), model architecture (`SmallMLP`, 9,537 parameters), optimizer (Adam, $\alpha = 0.001$), batch size (256), and client count ($K = 9$) constant. 
+
+On the global holdout test set, Controlled IID FedAvg achieved an F1-Score of **0.999430**, whereas Device Non-IID FedAvg reached **0.975696**, producing an observed performance margin of **0.023734** (~2.37 percentage points). In the IID condition, training samples were redistributed such that each client received an approximately equal volume (~549,313 rows) with identical class proportions matching the global dataset. This uniform distribution reduced parameter drift across clients during local SGD iterations, allowing sample-weighted FedAvg aggregation to produce global parameter updates that aligned closely with centralized loss minimization.
+
+In the natural device-level Non-IID condition, dataset sizes varied substantially across clients (ranging from 248,850 rows for `Ennio_Doorbell` to 769,074 rows for `Philips_B120N10_Baby_Monitor`), reflecting the natural traffic volume and feature characteristics of individual IoT device types. Local parameter updates were influenced by device-specific traffic distributions, introducing gradient diversity during local training epochs. While sample-weighted FedAvg aggregation successfully combined these local updates to reach a test F1-Score of **0.975696**, the non-IID data distribution introduced gradient variance across clients. This comparison demonstrates that data distribution heterogeneity is a key factor influencing global model generalization in federated intrusion detection.
+
+### 6.3 Federated Convergence Under Device-Level Heterogeneity
+The validation trajectories recorded across the 3 communication rounds provide insights into the early-stage convergence dynamics of FedAvg under differing data distributions. 
+
+For Controlled IID FedAvg, the global model achieved high validation performance in Round 1 (F1: **0.998890**, ROC-AUC: **0.999194**) and exhibited modest incremental changes through Round 2 (F1: **0.999122**, ROC-AUC: **0.999705**) and Round 3 (F1: **0.999403**, ROC-AUC: **0.999801**). The total validation F1 change from Round 1 to Round 3 was **+0.000513**, reflecting rapid early alignment due to homogeneous local data distributions.
+
+Conversely, Device Non-IID FedAvg displayed a pronounced convergence curve over the 3 measured rounds:
+* In Round 1, the model achieved a validation F1 of **0.959030** but a low ROC-AUC of **0.537014** (with validation loss at **0.828505**), indicating that initial parameter aggregation across heterogeneous device updates produced uncalibrated probability estimates across the global validation set.
+* In Round 2, validation loss dropped to **0.283213**, F1 increased to **0.962697**, and ROC-AUC rose sharply to **0.982908** ($\Delta\text{ROC-AUC} = +0.445894$).
+* In Round 3, validation loss further decreased to **0.133517**, F1 reached **0.975650** ($\Delta\text{F1} = +0.016620$ over Round 1), and ROC-AUC reached **0.991824** ($\Delta\text{ROC-AUC} = +0.454809$ over Round 1).
+
+Across the three measured rounds, the device-level Non-IID condition exhibited a pronounced increase in validation ROC-AUC, whereas the IID condition showed smaller changes from an already high initial value. However, executing 3 communication rounds represents an initial execution window rather than proof of complete asymptotic convergence. Extended round execution would be required to empirically map the full convergence tail under Non-IID device skew.
+
+### 6.4 Local-Only Device Variation
+Evaluating the 9 Local-Only models on their corresponding same-device test partitions revealed substantial performance dispersion across device types. Final test F1-Scores ranged from **0.913371** on the `Philips_B120N10_Baby_Monitor` partition to **0.999599** on the `SimpleHome_XCS7_1003_WHT_Security_Camera` partition, while test loss spanned from **0.011711** (`Samsung_SNH_1011_N_Webcam`) to **0.758990** (`Ennio_Doorbell`).
+
+All 9 local models achieved near-perfect Recall values ($\ge 0.999897$), indicating that local models consistently identified attack traffic within their local device streams. However, Precision varied considerably, dropping to **0.840555** for the Philips Baby Monitor and **0.892088** for the Ennio Doorbell. This variation indicates that a model trained only on one device's data did not exhibit uniform performance across the nine device-specific data sources.
+
+Several factors may contribute to this observed device-level variation:
+1. **Local Training Volume:** Local dataset sizes varied from 53,325 test samples (Ennio Doorbell) to 164,801 test samples (Philips Baby Monitor). Lower local sample counts provide fewer training examples for local feature fitting.
+2. **Device Traffic Characteristics:** Different IoT device categories (e.g., doorbells, thermostats, webcams, baby monitors) exhibit distinct baseline traffic patterns, packet size distributions, and attack payload structures.
+3. **Feature Distribution Variance:** Local models trained in isolation fit parameters tailored strictly to their local feature distributions, rendering precision sensitive to local benign/attack boundary noise.
+
+These observations illustrate that while local-only training avoids communication overhead and data sharing, it exposes individual devices to variable detection precision depending on local data characteristics.
+
+### 6.5 Communication and Computational Trade-offs
+Evaluating system efficiency requires examining both parameter exchange payload and host computational runtime:
+
+1. **Communication Payload Accounting:** The `SmallMLP` network architecture contains 9,537 float32 parameters, resulting in a compact model state dictionary size of **38,148 bytes** (~37.25 KiB). Under full client participation ($K = 9$), each communication round involves downloading and uploading 1 state dict per client, transferring **686,664 bytes** (~0.655 MiB) per round across all clients. Over the 3-round experiment, cumulative model parameter transfer totaled **2,059,992 bytes** (~1.96 MiB). The small parameter payload of the selected MLP results in a relatively small theoretical model-exchange volume under the assumed full-participation FedAvg protocol.
+2. **Computational Runtime and CPU Memory:** Host process execution metrics recorded peak process-tree RSS memory ranging between **610.94 MiB** (Centralized) and **668.36 MiB** (Controlled IID FedAvg). Total CPU wall-clock execution times were **5,018.94 s** (~83.65 min) for Centralized (3 epochs), **3,402.99 s** (~56.72 min) for Local-Only (3 epochs/client), **4,034.84 s** (~67.25 min) for Device Non-IID FedAvg (3 rounds), and **16,290.68 s** (~271.51 min) for Controlled IID FedAvg (3 rounds).
+
+*Runtime Observation:* Controlled IID FedAvg exhibited a wall-clock execution time (~4.53 hours) over four times longer than Device Non-IID FedAvg (~1.12 hours), despite both processing the identical total volume of 4,943,824 training rows. The implementation documentation identifies index-based partition access in the custom IID data loader as a likely contributor to the IID runtime overhead; however, the present experiments did not perform a dedicated profiling study that isolates the contribution of this mechanism.
+
+This comparison highlights that model parameter payload accounting and computational execution time represent distinct resource dimensions. A small model tensor size minimizes parameter exchange volume but does not eliminate CPU iteration or data-loading overheads during local epoch training.
+
+### 6.6 Implications for Resource-Aware IoT Intrusion Detection
+The empirical findings carry key implications for designing resource-aware intrusion detection systems in IoT network environments:
+
+* **Model Compactness vs. Detection Performance:** The 9,537-parameter `SmallMLP` architecture demonstrated that a compact neural network can achieve high detection performance on N-BaIoT traffic features (Centralized F1: 0.997097, Device Non-IID FedAvg F1: 0.975696). The small parameter footprint reduces storage overhead and model transfer volume.
+* **Collaboration vs. Isolation:** Local-only training eliminates network transmission entirely but produces device-dependent precision variations (F1 ranging from 0.913371 to 0.999599). Federated learning enables device collaboration without aggregating raw network logs, improving global test generalization (F1: 0.975696) across heterogeneous device traffic streams.
+* **Data Heterogeneity Considerations:** Real-world IoT deployments naturally feature Non-IID traffic distributions across device types. The observed performance gap between IID FedAvg (F1: 0.999430) and Device Non-IID FedAvg (F1: 0.975696) underscores that data heterogeneity remains a primary factor influencing global model quality. System designers must account for non-IID skew when deploying federated intrusion detection models.
+* **Resource Dimension Disconnect:** Optimizing a system solely for parameter size or communication payload does not guarantee low computational execution runtime. System evaluation must account for local data loading, training epoch iteration, and coordinator aggregation alongside parameter exchange volume.
+
+### 6.7 Interpretation Boundaries
+To maintain scientific rigor, the conclusions drawn from this study must be interpreted within the specific boundaries of the experimental design:
+
+1. **Global Preprocessing Scaler Fitting:** As detailed in Section 4.2, `StandardScaler` parameters ($\mu, \sigma$) were fitted globally on the combined training set prior to partitioning. While this ensured consistent feature scaling across baselines, it does not represent a fully decentralized edge pipeline. In an actual edge deployment, computing global feature statistics would require an initial federated analytics step.
+2. **Evaluation Scope Heterogeneity:** Global models (Centralized, FedAvg) were evaluated against the entire global test set (1,059,388 rows), whereas Local-Only models were evaluated against device-specific test subsets. Local-Only macro/weighted averages reflect local specialization rather than global generalization.
+3. **Communication Accounting vs. Actual Network Traffic:** Reported communication bytes represent theoretical model parameter state dictionary payload calculations (`state_dict`). They do not measure physical network socket traffic, nor do they account for TCP/IP headers, TLS encryption, HTTP/gRPC frames, payload compression, serialization overhead, latency, or packet drops.
+4. **Process RSS Memory vs. Hardware Edge Constraints:** Reported memory metrics reflect host process-tree Resident Set Size (RSS) during CPU simulation execution. They do not measure edge device hardware RAM limits, micro-controller memory bounds, or physical battery/energy consumption.
+5. **Single Random Seed & Short Execution Window:** All experiments were conducted using a single random seed (42) across 3 communication rounds (or 3 epochs). The findings reflect a single empirical execution run; statistical variance across multiple random seeds and long-term convergence over extended rounds remain unmeasured.
+6. **Absence of Formal Privacy Guarantees:** Vanilla FedAvg avoids centralizing raw training observations on a server. However, it does not incorporate Differential Privacy ($\epsilon, \delta$) or Secure Aggregation mechanisms. Exchanged model weights remain vulnerable to gradient/parameter reconstruction or membership inference attacks; no formal privacy protection is claimed or proven.
+
+---
 
 ## 7. Limitations
-*(Section to be completed in Stage 4)*
+*(Section to be completed in Stage 5)*
 
 ## 8. Conclusion
-*(Section to be completed in Stage 4)*
+*(Section to be completed in Stage 5)*

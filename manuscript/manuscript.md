@@ -116,7 +116,188 @@ To ensure full reproducibility, the repository includes fixed random seed defini
 ---
 
 ## 5. Results
-*(Section to be completed in Stage 3)*
+
+### 5.1 Overall Final-Test Performance
+The primary evaluation results on the frozen holdout test set across all four experimental conditions are presented in Table 1. Models were evaluated using the frozen StandardScaler parameters fitted on training data, with predictions evaluated at a fixed classification threshold of 0.5.
+
+**Table 1: Final holdout test set evaluation results.**
+*Note: Centralized, Device Non-IID FedAvg, and IID FedAvg models were evaluated on the global test set (1,059,388 samples). Local-Only models were evaluated on their respective device-specific test subsets (summing to 1,059,388 samples total); both macro and sample-weighted averages across the 9 device models are reported.*
+
+| Experiment | Evaluation Scope | Test Rows | Loss | Accuracy | Precision | Recall | F1-Score | ROC-AUC |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Centralized Baseline** | Global Test Set | 1,059,388 | 0.051443 | 0.994635 | 0.994216 | 0.999994 | 0.997097 | 0.996899 |
+| **Controlled IID FedAvg (Round 3)** | Global Test Set | 1,059,388 | 0.005075 | 0.998949 | 0.999193 | 0.999667 | 0.999430 | 0.999859 |
+| **Device Non-IID FedAvg (Round 3)** | Global Test Set | 1,059,388 | 0.129260 | 0.954104 | 0.952555 | 0.999990 | 0.975696 | 0.992387 |
+| **Local-Only (Macro Average)** | Same-Device Test Subsets | 1,059,388 | 0.313455 | 0.946415 | 0.945825 | 0.999971 | 0.971422 | 0.994417 |
+| **Local-Only (Weighted Average)** | Same-Device Test Subsets | 1,059,388 | 0.315096 | 0.943251 | 0.942662 | 0.999976 | 0.969684 | 0.994566 |
+
+On the global test set, the Centralized baseline model achieved an F1-Score of **0.997097**, an Accuracy of **0.994635**, and a Loss of **0.051443**. Under the controlled class-stratified IID partition, IID FedAvg after 3 rounds reached an F1-Score of **0.999430**, an Accuracy of **0.998949**, and a Loss of **0.005075**. Under the natural device-based Non-IID partition, Device Non-IID FedAvg after 3 rounds reached an F1-Score of **0.975696**, an Accuracy of **0.954104**, and a Loss of **0.129260**.
+
+For the Local-Only baseline, where 9 independent models were trained on single-device partitions, the macro-averaged F1-Score across the 9 local evaluations was **0.971422** (Accuracy: **0.946415**, Loss: **0.313455**), while the sample-weighted average F1-Score was **0.969684** (Accuracy: **0.943251**, Loss: **0.315096**).
+
+*Evaluation Scope Distinction:* As detailed in Section 4.7, the Centralized and FedAvg global models were evaluated against the entire global test set (1,059,388 rows across all 9 devices). In contrast, each Local-Only model was evaluated strictly against the test rows belonging to its corresponding device. Therefore, Local-Only metrics reflect local specialization on same-device distributions and should not be interpreted as directly equivalent in evaluation scope to the global-model metrics.
+
+---
+
+### 5.2 FedAvg Convergence Across Rounds
+The progression of validation set metrics across the 3 communication rounds for Device Non-IID FedAvg and Controlled IID FedAvg is detailed in Table 2. Validation metrics were evaluated on the global validation set (1,059,394 rows) at the end of each round.
+
+**Table 2: Global validation performance across communication rounds for FedAvg partitions.**
+
+| Partition | Round | Training Samples | Aggregation Time (s) | Round Wall Time (s) | Loss | Accuracy | Precision | Recall | F1-Score | ROC-AUC |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Device Non-IID** | 1 | 4,943,824 | 0.006371 | 828.88 | 0.828505 | 0.921285 | 0.921285 | 1.000000 | 0.959030 | 0.537014 |
+| **Device Non-IID** | 2 | 4,943,824 | 0.004894 | 805.37 | 0.283213 | 0.928603 | 0.928078 | 0.999998 | 0.962697 | 0.982908 |
+| **Device Non-IID** | 3 | 4,943,824 | 0.005069 | 778.94 | 0.133517 | 0.954014 | 0.952468 | 0.999989 | 0.975650 | 0.991824 |
+| **Controlled IID** | 1 | 4,943,824 | 0.005771 | 5213.75 | 0.009921 | 0.997956 | 0.999254 | 0.998528 | 0.998890 | 0.999194 |
+| **Controlled IID** | 2 | 4,943,824 | 0.003809 | 4730.39 | 0.006481 | 0.998382 | 0.999254 | 0.998990 | 0.999122 | 0.999705 |
+| **Controlled IID** | 3 | 4,943,824 | 0.004017 | 4739.48 | 0.005061 | 0.998900 | 0.999142 | 0.999665 | 0.999403 | 0.999801 |
+
+![FedAvg F1 Convergence](../results/processed/publication/figures/fedavg_f1_convergence.png)  
+*Figure 1: Validation F1-Score progression across communication rounds for Device Non-IID and Controlled IID FedAvg.*
+
+![FedAvg ROC-AUC Convergence](../results/processed/publication/figures/fedavg_roc_auc_convergence.png)  
+*Figure 2: Validation ROC-AUC progression across communication rounds for Device Non-IID and Controlled IID FedAvg.*
+
+For Device Non-IID FedAvg, validation performance improved steadily over the three measured rounds:
+* Validation Loss decreased from **0.828505** in Round 1 to **0.283213** in Round 2, and further to **0.133517** in Round 3.
+* Validation F1-Score increased from **0.959030** (Round 1) to **0.962697** (Round 2) and **0.975650** (Round 3), representing an overall gain of **+0.016620** (+1.66 percentage points).
+* Validation ROC-AUC exhibited a substantial increase from **0.537014** in Round 1 to **0.982908** in Round 2 and **0.991824** in Round 3, representing an absolute change of **+0.454809**.
+
+For Controlled IID FedAvg, validation performance started at a high baseline in Round 1 and changed modestly across subsequent rounds:
+* Validation Loss decreased from **0.009921** (Round 1) to **0.006481** (Round 2) and **0.005061** (Round 3).
+* Validation F1-Score shifted from **0.998890** in Round 1 to **0.999122** in Round 2 and **0.999403** in Round 3, representing a change of **+0.000513**.
+* Validation ROC-AUC moved from **0.999194** in Round 1 to **0.999705** in Round 2 and **0.999801** in Round 3, representing a change of **+0.000608**.
+
+---
+
+### 5.3 Local-Only Device-Level Results
+Table 3 details the individual performance of the 9 local-only models on their respective device-specific test subsets. Each local model was trained for 3 epochs using only data originating from that specific IoT device.
+
+**Table 3: Local-Only model test evaluation performance by individual IoT device source.**
+
+| Device Identifier | Test Samples | Loss | Accuracy | Precision | Recall | F1-Score | ROC-AUC |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Danmini_Doorbell** | 152,744 | 0.407299 | 0.951343 | 0.951343 | 1.000000 | 0.975065 | 0.987414 |
+| **Ecobee_Thermostat** | 125,381 | 0.061210 | 0.984320 | 0.984320 | 1.000000 | 0.992098 | 0.995744 |
+| **Ennio_Doorbell** | 53,325 | 0.758990 | 0.892339 | 0.892088 | 1.000000 | 0.942967 | 0.986173 |
+| **Philips_B120N10_Baby_Monitor** | 164,801 | 0.622557 | 0.840565 | 0.840555 | 1.000000 | 0.913371 | 0.997396 |
+| **Provision_PT_737E_Security_Camera** | 124,239 | 0.356412 | 0.943971 | 0.942885 | 1.000000 | 0.970603 | 0.993009 |
+| **Provision_PT_838_Security_Camera** | 125,533 | 0.535976 | 0.921264 | 0.918077 | 0.999991 | 0.957285 | 0.997157 |
+| **Samsung_SNH_1011_N_Webcam** | 56,283 | 0.011711 | 0.997015 | 0.996647 | 0.999897 | 0.998269 | 0.999943 |
+| **SimpleHome_XCS7_1002_WHT_Security_Camera** | 129,458 | 0.046649 | 0.987703 | 0.987254 | 0.999910 | 0.993542 | 0.999340 |
+| **SimpleHome_XCS7_1003_WHT_Security_Camera** | 127,624 | 0.020290 | 0.999216 | 0.999255 | 0.999944 | 0.999599 | 0.993573 |
+
+![Local-Only F1 by Device](../results/processed/publication/figures/local_only_f1_by_device.png)  
+*Figure 3: Final test F1-Score breakdown for Local-Only models evaluated on individual device test partitions.*
+
+Observed test performance varied across the 9 local device models:
+* Test F1-Scores ranged from **0.913371** (Philips B120N10 Baby Monitor) to **0.999599** (SimpleHome XCS7-1003 WHT Security Camera).
+* Test Loss ranged from **0.011711** (Samsung SNH-1011 N Webcam) to **0.758990** (Ennio Doorbell).
+* All 9 local models exhibited high Recall values ($\ge 0.999897$), while Precision varied between **0.840555** (Philips Baby Monitor) and **0.999255** (SimpleHome 1003 Security Camera).
+* The unweighted macro-average across all 9 local models was **0.971422** for F1-Score, **0.946415** for Accuracy, and **0.313455** for Loss.
+* The sample-weighted average across all 9 local models was **0.969684** for F1-Score, **0.943251** for Accuracy, and **0.315096** for Loss.
+
+---
+
+### 5.4 Communication Cost
+Communication volume was calculated based on the model state dictionary payload accounting model (`experiments/scripts/measure_communication.py`). Results are summarized in Table 4.
+
+**Table 4: Model parameter payload communication volume accounting.**
+
+| Scenario | Rounds | Participating Clients | Download (Bytes) | Upload (Bytes) | Total Exchange (Bytes) | Total (MiB) | Total (MB Decimal) | Accounting Status |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Per Client per Round** | 1 | 1 | 38,148 | 38,148 | 76,296 | 0.072762 | 0.076296 | Per-round estimate |
+| **All Clients per Round** | 1 | 9 | 343,332 | 343,332 | 686,664 | 0.654854 | 0.686664 | Per-round estimate |
+| **Measured 3-Round Experiment** | 3 | 9 | 1,029,996 | 1,029,996 | 2,059,992 | 1.964561 | 2.059992 | Executed experiments |
+| **Configured 10-Round Projection** | 10 | 9 | 3,433,320 | 3,433,320 | 6,866,640 | 6.548538 | 6.866640 | Linear projection |
+
+![Communication Payload](../results/processed/publication/figures/communication_payload.png)  
+*Figure 4: Cumulative model parameter payload transmission volume across communication rounds.*
+
+Key communication payload measurements:
+* The `SmallMLP` model parameter state dictionary contains 9,537 float32 values, requiring **38,148 bytes** (~37.25 KiB / 0.038148 MB).
+* For each communication round, one client downloads 1 state dictionary (38,148 bytes) and uploads 1 updated state dictionary (38,148 bytes), yielding **76,296 bytes** (~74.51 KiB) per client per round.
+* Across all 9 participating clients, the total parameter transfer per round is **686,664 bytes** (~0.654854 MiB / 0.686664 MB).
+* For the completed 3-round FedAvg experiments, the total cumulative parameter exchange across all clients was **2,059,992 bytes** (~1.964561 MiB / 2.059992 MB).
+* If projected linearly to the configured maximum of 10 rounds, the estimated payload exchange would be **6,866,640 bytes** (~6.548538 MiB / 6.866640 MB). *Note: No 10-round experiment was executed.*
+
+*Accounting Scope Disclaimer:* As stated in Section 4.8, these figures represent model tensor payload accounting based on parameter state dictionary size. They do NOT represent measured network socket traffic and do not include TCP/IP headers, TLS encryption, HTTP/gRPC frame headers, serialization overhead, payload compression, network latency, or packet retransmissions.
+
+---
+
+### 5.5 Computational Resource Usage
+Resource usage was measured during process execution via process-tree Resident Set Size (RSS) sampling at 0.1-second intervals using `psutil`. Results are reported in Table 5.
+
+**Table 5: Computational resource usage and wall-clock execution runtimes on CPU.**
+
+| Experiment | Status | Exit Code | Measurement Metric | Peak RSS (Bytes) | Peak RSS (MiB) | Sampling Interval (s) | Samples Collected | Execution Wall Time (s) | Wall Time (Min) |
+| :--- | :---: | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Centralized Baseline** | Completed | 0 | Peak Process-Tree RSS | 640,614,400 | 610.9375 | 0.1 | 42,600 | 5,018.9433 | ~83.65 min |
+| **Local-Only Baseline** | Completed | 0 | Peak Process-Tree RSS | 640,630,784 | 610.9531 | 0.1 | 29,202 | 3,402.9905 | ~56.72 min |
+| **Device Non-IID FedAvg** | Completed | 0 | Peak Process-Tree RSS | 651,730,944 | 621.5391 | 0.1 | 35,246 | 4,034.8426 | ~67.25 min |
+| **Controlled IID FedAvg** | Completed | 0 | Peak Process-Tree RSS | 700,821,504 | 668.3555 | 0.1 | 145,510 | 16,290.6821 | ~271.51 min |
+
+![Experiment Runtime](../results/processed/publication/figures/experiment_runtime.png)  
+*Figure 5: Total execution wall time across experimental conditions on CPU.*
+
+![Peak Memory Usage](../results/processed/publication/figures/peak_memory_usage.png)  
+*Figure 6: Observed peak process-tree RAM usage (Resident Set Size in MiB) across experimental conditions.*
+
+Observed resource and runtime metrics:
+* **Centralized Baseline (3 epochs):** Processed 4.94M training rows in **5,018.94 seconds** (~83.65 min) with a peak process-tree RSS of **610.94 MiB** (640,614,400 bytes).
+* **Local-Only Baseline (3 epochs/client):** Completed training across all 9 local models in **3,402.99 seconds** (~56.72 min) with a peak RSS of **610.95 MiB** (640,630,784 bytes).
+* **Device Non-IID FedAvg (3 rounds):** Completed 3 communication rounds in **4,034.84 seconds** (~67.25 min) with a peak RSS of **621.54 MiB** (651,730,944 bytes).
+* **Controlled IID FedAvg (3 rounds):** Recorded an execution wall time of **16,290.68 seconds** (~271.51 min / ~4.53 hours) with a peak RSS of **668.36 MiB** (700,821,504 bytes).
+
+*Runtime Observation:* The execution wall time for Controlled IID FedAvg (16,290.68 s) was substantially higher than that of Device Non-IID FedAvg (4,034.84 s), despite both processing the same total number of training rows (4,943,824). As noted in repository implementation documentation, this runtime difference is associated with indexing overhead in the custom PyTorch IID data partitioner across the 9 clients during epoch iteration, rather than model parameter computation time.
+
+*Resource Scope Disclaimer:* Reported peak RSS measures RAM allocated to the Python process tree during execution on a host CPU system. Runtimes and RAM usage reflect single-host simulation performance and do not represent edge device battery consumption, hardware memory limits, or physical energy usage.
+
+---
+
+### 5.6 Validation-to-Test Consistency
+To evaluate consistency between model selection and final holdout evaluation, Table 6 compares the final validation set metrics against the global test set metrics for the global model experiments.
+
+**Table 6: Comparison between final validation set metrics and global holdout test set metrics.**
+
+| Experiment | Metric | Validation Scope | Test Scope | Validation Value | Test Value | Difference (Test - Val) | Percentage Change |
+| :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
+| **Centralized** | Loss | Global Val (Epoch 3) | Global Test | 0.052471 | 0.051443 | -0.001028 | -1.96% |
+| **Centralized** | Accuracy | Global Val (Epoch 3) | Global Test | 0.994549 | 0.994635 | +0.000086 | +0.01% |
+| **Centralized** | Precision | Global Val (Epoch 3) | Global Test | 0.994122 | 0.994216 | +0.000094 | +0.01% |
+| **Centralized** | Recall | Global Val (Epoch 3) | Global Test | 0.999996 | 0.999994 | -0.000002 | -0.00% |
+| **Centralized** | F1-Score | Global Val (Epoch 3) | Global Test | 0.997050 | 0.997097 | +0.000046 | +0.00% |
+| **Centralized** | ROC-AUC | Global Val (Epoch 3) | Global Test | 0.996878 | 0.996899 | +0.000021 | +0.00% |
+| **Device Non-IID FedAvg** | Loss | Global Val (Round 3) | Global Test | 0.133517 | 0.129260 | -0.004258 | -3.19% |
+| **Device Non-IID FedAvg** | Accuracy | Global Val (Round 3) | Global Test | 0.954014 | 0.954104 | +0.000089 | +0.01% |
+| **Device Non-IID FedAvg** | Precision | Global Val (Round 3) | Global Test | 0.952468 | 0.952555 | +0.000087 | +0.01% |
+| **Device Non-IID FedAvg** | Recall | Global Val (Round 3) | Global Test | 0.999989 | 0.999990 | +0.000001 | +0.00% |
+| **Device Non-IID FedAvg** | F1-Score | Global Val (Round 3) | Global Test | 0.975650 | 0.975696 | +0.000046 | +0.00% |
+| **Device Non-IID FedAvg** | ROC-AUC | Global Val (Round 3) | Global Test | 0.991824 | 0.992387 | +0.000564 | +0.06% |
+| **Controlled IID FedAvg** | Loss | Global Val (Round 3) | Global Test | 0.005061 | 0.005075 | +0.000014 | +0.28% |
+| **Controlled IID FedAvg** | Accuracy | Global Val (Round 3) | Global Test | 0.998900 | 0.998949 | +0.000049 | +0.00% |
+| **Controlled IID FedAvg** | Precision | Global Val (Round 3) | Global Test | 0.999142 | 0.999193 | +0.000051 | +0.01% |
+| **Controlled IID FedAvg** | Recall | Global Val (Round 3) | Global Test | 0.999665 | 0.999667 | +0.000002 | +0.00% |
+| **Controlled IID FedAvg** | F1-Score | Global Val (Round 3) | Global Test | 0.999403 | 0.999430 | +0.000027 | +0.00% |
+| **Controlled IID FedAvg** | ROC-AUC | Global Val (Round 3) | Global Test | 0.999801 | 0.999859 | +0.000058 | +0.01% |
+
+Across all three global model conditions, validation set performance and holdout test set performance showed close numerical agreement:
+* For the **Centralized baseline**, F1-Score was **0.997050** on validation and **0.997097** on test ($\Delta = +0.000046$). Loss was **0.052471** on validation and **0.051443** on test ($\Delta = -0.001028$).
+* For **Device Non-IID FedAvg**, F1-Score was **0.975650** on validation and **0.975696** on test ($\Delta = +0.000046$). Loss was **0.133517** on validation and **0.129260** on test ($\Delta = -0.004258$).
+* For **Controlled IID FedAvg**, F1-Score was **0.999403** on validation and **0.999430** on test ($\Delta = +0.000027$). Loss was **0.005061** on validation and **0.005075** on test ($\Delta = +0.000014$).
+
+---
+
+### 5.7 Summary of Empirical Findings
+1. **Holdout Test Performance:** On the global holdout test set (1,059,388 rows), Centralized baseline achieved F1=0.997097, Controlled IID FedAvg (Round 3) achieved F1=0.999430, and Device Non-IID FedAvg (Round 3) achieved F1=0.975696. Local-Only models achieved a macro-averaged F1 of 0.971422 and a sample-weighted F1 of 0.969684 on local same-device test subsets.
+2. **Convergence Behavior:** Device Non-IID FedAvg validation F1-Score increased from 0.959030 (Round 1) to 0.975650 (Round 3), while validation ROC-AUC changed from 0.537014 to 0.991824. Controlled IID FedAvg validation F1-Score moved from 0.998890 (Round 1) to 0.999403 (Round 3).
+3. **Local-Only Heterogeneity:** Individual Local-Only device test F1-Scores ranged from 0.913371 (Philips Baby Monitor) to 0.999599 (SimpleHome 1003 Security Camera).
+4. **Communication Volume:** The `SmallMLP` parameter state dictionary size is 38,148 bytes (~37.25 KiB). Across 9 clients and 3 rounds, total cumulative parameter exchange was 2,059,992 bytes (~1.96 MiB).
+5. **Resource Runtimes and Memory:** Executed wall times on CPU ranged from 3,402.99 s (~56.7 min for Local-Only) to 16,290.68 s (~271.5 min for IID FedAvg). Peak process-tree RSS memory ranged from 610.94 MiB (Centralized) to 668.36 MiB (IID FedAvg).
+6. **Validation-to-Test Stability:** Final validation set metrics and holdout test set metrics exhibited close numerical alignment across all global model experiments ($\Delta \text{F1} \le 0.000046$).
+
+---
 
 ## 6. Discussion
 *(Section to be completed in Stage 4)*

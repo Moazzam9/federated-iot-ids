@@ -1,0 +1,5 @@
+scenario,rounds,clients_per_round,download_bytes,upload_bytes,total_bytes,total_mib,total_mb_decimal,status
+per_client_per_round,1,9,38148,38148,76296,0.07276153564453125,0.076296,per-round estimate
+all_clients_per_round,1,9,343332,343332,686664,0.6548538208007812,0.686664,per-round estimate
+measured_3_round_experiment,3,9,1029996,1029996,2059992,1.9645614624023438,2.059992,completed experiments
+configured_10_round_projection,10,9,3433320,3433320,6866640,6.5485382080078125,6.86664,projection

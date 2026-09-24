@@ -1,0 +1,5 @@
+experiment,status,exit_code,metric,peak_rss_bytes,peak_rss_mib,sampling_interval_seconds,samples_collected,wall_time_seconds
+centralized,completed,0,peak_process_tree_rss,640614400,610.9375,0.1,42600,5018.9433373000065
+local_only,completed,0,peak_process_tree_rss,640630784,610.953125,0.1,29202,3402.990531000003
+device_non_iid_fedavg,completed,0,peak_process_tree_rss,651730944,621.5390625,0.1,35246,4034.842574800001
+iid_fedavg,completed,0,peak_process_tree_rss,700821504,668.35546875,0.1,145510,16290.682052299999
